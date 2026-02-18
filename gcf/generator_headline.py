@@ -1,12 +1,14 @@
 """Headline generation sub-agent."""
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from jinja2 import Template
 
+from gcf.cache import CacheStore, make_cache_key, config_fingerprint
 from gcf.config import AppConfig
 from gcf.providers.base import BaseProvider
 from gcf.validator import validate_headline
@@ -37,14 +39,40 @@ def generate_headlines(
     strategy: str,
     cfg: AppConfig,
     memory_context: str = "",
-) -> List[str]:
-    """Generate, validate, dedupe headlines. Retries on failure."""
-    tmpl = _load_template()
+    cache_store: Optional[CacheStore] = None,
+) -> tuple[List[str], int]:
+    """Generate, validate, dedupe headlines. Retries on failure.
+
+    Checks *cache_store* before calling the LLM.  On a cache hit the stored
+    list is returned immediately (fail_count = 0, no API call made).
+
+    Returns:
+        (valid_headlines, fail_count) — fail_count is the number of
+        candidates that did not pass validation across all attempts.
+    """
     gen_cfg = cfg.generation
+    ad_id = ad_row.get("ad_id", "")
+    cap = gen_cfg.max_variants_headline  # output cap (lower than num_headlines)
 
-    all_valid: List[str] = []
+    # ── Cache check ───────────────────────────────────────────────────────────
+    cache_key: Optional[str] = None
+    if cache_store is not None:
+        fp = config_fingerprint(cfg)
+        cache_key = make_cache_key(ad_id, fp, strategy) + ":headlines"
+        cached = cache_store.get(cache_key)
+        if cached is not None:
+            headlines = json.loads(cached)
+            return headlines[:cap], 0
 
-    for attempt in range(gen_cfg.retry_limit):
+    # ── LLM generation with validation retries ────────────────────────────────
+    tmpl = _load_template()
+    fail_count = 0
+    best_valid: List[str] = []
+    max_attempts = gen_cfg.max_retries_validation
+
+    for attempt in range(max_attempts):
+        attempt_valid: List[str] = []
+
         prompt = tmpl.render(
             num_headlines=gen_cfg.num_headlines,
             campaign=ad_row.get("campaign", ""),
@@ -63,12 +91,24 @@ def generate_headlines(
         for c in candidates:
             result = validate_headline(c, gen_cfg.max_headline_chars, cfg.policy)
             if result["valid"]:
-                all_valid.append(c)
+                attempt_valid.append(c)
+            else:
+                fail_count += 1
 
-        # Dedupe
-        all_valid = dedupe_texts(all_valid, cfg.dedupe.similarity_threshold)
+        # Dedupe this attempt's results
+        attempt_valid = dedupe_texts(attempt_valid, cfg.dedupe.similarity_threshold)
 
-        if len(all_valid) >= gen_cfg.num_headlines:
+        # Keep the best set seen so far
+        if len(attempt_valid) > len(best_valid):
+            best_valid = attempt_valid
+
+        if len(best_valid) >= gen_cfg.num_headlines:
             break
 
-    return all_valid[: gen_cfg.num_headlines]
+    result_list = best_valid[:cap]
+
+    # ── Persist to cache ──────────────────────────────────────────────────────
+    if cache_store is not None and cache_key is not None:
+        cache_store.set(cache_key, json.dumps(result_list))
+
+    return result_list, fail_count

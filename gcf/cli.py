@@ -22,6 +22,8 @@ def _get_provider(cfg, mode: str):
             model=pcfg.model,
             temperature=pcfg.temperature,
             max_tokens=pcfg.max_tokens,
+            retry_cfg=cfg.retry_api,
+            budget_cfg=cfg.budget,
         )
 
 
@@ -45,6 +47,8 @@ def run(input_path: str, output_dir: str, mode: str, config_path: str):
         click.echo("🏃 DRY-RUN mode — using MockProvider (no API calls)")
     else:
         click.echo("🚀 LIVE mode — using Anthropic API")
+        click.echo(f"   Budget: max_calls_per_run={cfg.budget.max_calls_per_run}")
+        click.echo(f"   Cache:  {'enabled' if cfg.cache.enabled else 'disabled'} → {cfg.cache.path}")
 
     provider = _get_provider(cfg, mode)
 
@@ -64,6 +68,24 @@ def run(input_path: str, output_dir: str, mode: str, config_path: str):
     click.echo(f"   Validation passed: {summary['pass_count']}")
     click.echo(f"   Validation failed: {summary['fail_count']}")
     click.echo(f"   Files written to: {output_dir}/")
+
+    # Print API / cache stats for live mode
+    pstats = summary.get("provider_stats", {})
+    cstats = summary.get("cache_stats", {})
+    if pstats:
+        click.echo("")
+        click.echo("📊 LLM Stats:")
+        click.echo(f"   API calls: {pstats.get('call_count', 0)}  |  Retries: {pstats.get('retry_count', 0)}")
+        click.echo(f"   Tokens:    {pstats.get('total_tokens', 0):,}  "
+                   f"(in: {pstats.get('total_input_tokens', 0):,}  "
+                   f"out: {pstats.get('total_output_tokens', 0):,})")
+        if pstats.get("last_error"):
+            click.echo(f"   Last error: {pstats['last_error']}", err=True)
+    if cstats:
+        hit_pct = f"{cstats.get('hit_rate', 0) * 100:.1f}%"
+        click.echo(f"   Cache:     hits={cstats.get('hits', 0)}  "
+                   f"misses={cstats.get('misses', 0)}  "
+                   f"hit_rate={hit_pct}")
 
 
 @cli.command("ingest-results")

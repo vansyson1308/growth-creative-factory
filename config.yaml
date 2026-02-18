@@ -12,12 +12,15 @@ selector:
 
 # Generation settings
 generation:
-  num_headlines: 10            # headlines per ad
-  num_descriptions: 6          # descriptions per ad
+  num_headlines: 10            # headlines to request from LLM per attempt
+  num_descriptions: 6          # descriptions to request from LLM per attempt
   max_headline_chars: 30       # Google Ads headline limit
   max_description_chars: 90    # Google Ads description limit
-  retry_limit: 3               # retries when validation fails
-  max_variants_per_run: 100    # safety cap
+  retry_limit: 3               # (legacy) alias for max_retries_validation
+  max_variants_per_run: 100    # safety cap on cross-product combinations
+  max_variants_headline: 5     # max headlines passed to pipeline (cost control)
+  max_variants_desc: 3         # max descriptions passed to pipeline (cost control)
+  max_retries_validation: 2    # validation-retry loops per generator call
 
 # Deduplication
 dedupe:
@@ -44,3 +47,19 @@ provider:
 # Memory
 memory:
   path: memory/memory.jsonl
+
+# Budget guardrails (live mode)
+budget:
+  max_calls_per_run: 50        # max generate() calls per pipeline run; 0 = unlimited
+  daily_budget_tokens: 100000  # informational ceiling (not auto-enforced)
+
+# API retry / backoff (live mode)
+retry_api:
+  max_api_retries: 3           # extra attempts on 429/529/5xx
+  backoff_base_seconds: 1.0    # base for exponential back-off
+  backoff_max_seconds: 60.0    # cap on any single sleep
+
+# LLM response cache (SQLite)
+cache:
+  enabled: true                # set to false to disable entirely
+  path: cache/llm_cache.db     # relative to working directory

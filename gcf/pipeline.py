@@ -38,6 +38,17 @@ def _build_memory_context(cfg: AppConfig, campaign: str) -> str:
     return "\n".join(lines)
 
 
+def _make_cache_store(cfg: AppConfig, mode: str):
+    """Return a CacheStore if caching is enabled, else None."""
+    if not cfg.cache.enabled:
+        return None
+    try:
+        from gcf.cache import CacheStore
+        return CacheStore(cfg.cache.path)
+    except Exception:
+        return None
+
+
 def run_pipeline(
     input_path: str | Path,
     output_dir: str | Path,
@@ -48,6 +59,9 @@ def run_pipeline(
     """Execute the full pipeline. Returns summary dict."""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Cache ─────────────────────────────────────────────────────────────────
+    cache_store = _make_cache_store(cfg, mode)
 
     # 1. Read input
     df = read_ads_csv(input_path)
@@ -63,6 +77,8 @@ def run_pipeline(
             "pass_count": 0,
             "fail_count": 0,
             "message": "No underperforming ads found with current thresholds.",
+            "provider_stats": {},
+            "cache_stats": {},
         }
         write_report(_format_report(summary, []), output_dir / "report.md")
         return summary
@@ -82,9 +98,13 @@ def run_pipeline(
 
         memory_ctx = _build_memory_context(cfg, ad.get("campaign", ""))
 
-        # Generate
-        headlines, h_fail = generate_headlines(provider, ad, strategy, cfg, memory_ctx)
-        descriptions, d_fail = generate_descriptions(provider, ad, strategy, cfg, memory_ctx)
+        # Generate (cache-aware)
+        headlines, h_fail = generate_headlines(
+            provider, ad, strategy, cfg, memory_ctx, cache_store
+        )
+        descriptions, d_fail = generate_descriptions(
+            provider, ad, strategy, cfg, memory_ctx, cache_store
+        )
 
         h_count = len(headlines)
         d_count = len(descriptions)
@@ -141,6 +161,10 @@ def run_pipeline(
     write_new_ads_csv(new_ads_rows, output_dir / "new_ads.csv")
     write_figma_tsv(figma_rows, output_dir / "figma_variations.tsv")
 
+    # 5. Collect runtime stats
+    provider_stats = provider.stats() if hasattr(provider, "stats") else {}
+    cache_stats = cache_store.stats() if cache_store is not None else {}
+
     summary = {
         "total_ads": len(df),
         "selected": len(selected),
@@ -148,6 +172,8 @@ def run_pipeline(
         "pass_count": total_pass,
         "fail_count": total_fail,
         "message": "Pipeline completed successfully.",
+        "provider_stats": provider_stats,
+        "cache_stats": cache_stats,
     }
     write_report(_format_report(summary, report_details), output_dir / "report.md")
 
@@ -155,6 +181,9 @@ def run_pipeline(
 
 
 def _format_report(summary: Dict, details: List[Dict]) -> str:
+    pstats = summary.get("provider_stats", {})
+    cstats = summary.get("cache_stats", {})
+
     lines = [
         "# Growth Creative Factory — Run Report",
         f"**Date:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
@@ -167,6 +196,32 @@ def _format_report(summary: Dict, details: List[Dict]) -> str:
         f"- Copy pieces failed validation: {summary['fail_count']}",
         "",
     ]
+
+    # ── LLM / API stats ───────────────────────────────────────────────────────
+    if pstats:
+        lines += [
+            "## LLM API Stats",
+            f"- API calls made: {pstats.get('call_count', 0)}",
+            f"- Retries (backoff): {pstats.get('retry_count', 0)}",
+            f"- Input tokens: {pstats.get('total_input_tokens', 0):,}",
+            f"- Output tokens: {pstats.get('total_output_tokens', 0):,}",
+            f"- Total tokens: {pstats.get('total_tokens', 0):,}",
+        ]
+        if pstats.get("last_error"):
+            lines.append(f"- Last error: `{pstats['last_error']}`")
+        lines.append("")
+
+    # ── Cache stats ───────────────────────────────────────────────────────────
+    if cstats:
+        hit_pct = f"{cstats.get('hit_rate', 0) * 100:.1f}%"
+        lines += [
+            "## Cache Stats",
+            f"- Cache hits: {cstats.get('hits', 0)}",
+            f"- Cache misses: {cstats.get('misses', 0)}",
+            f"- Hit rate: {hit_pct}",
+            "",
+        ]
+
     if not details:
         lines.append(summary.get("message", ""))
         return "\n".join(lines)
