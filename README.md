@@ -1,110 +1,241 @@
 # Growth Creative Factory
 
-[![CI](https://github.com/your-org/growth-creative-factory/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/growth-creative-factory/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+**Growth Creative Factory** là một bộ công cụ **local-first** giúp team marketing tạo *creative quảng cáo hàng loạt* nhanh hơn rất nhiều:
 
-Growth Creative Factory (GCF) is a local-first pipeline that helps marketing teams turn ad performance exports into validated headline/description variants, with optional AI generation and optional ad-platform connectors, then hands off clean TSV output to Figma for fast creative production.
+- Import hiệu suất quảng cáo (CSV) hoặc **pull từ Google Ads / Meta Ads** (tuỳ chọn)
+- Chọn ads kém hiệu quả → tạo biến thể copy (headline/description) theo ràng buộc (ví dụ: 30/90 ký tự)
+- Xuất `TSV` để **Figma Plugin** tự nhân bản template thành tối đa **100 frames** và export PNG hàng loạt
+- Có **memory log** + ingest results để ghi lại giả thuyết/biến thể/kết quả test (tối ưu dần theo campaign)
 
-## What is this?
+> BYO Credentials: Repo này **không chứa secret**. Ai dùng tự cấu hình key/token/credentials của họ.
 
-GCF ingests ad performance CSVs, filters underperforming rows, generates compliant copy variants, validates character/policy constraints, and exports both bulk-upload CSV and Figma-ready TSV. It supports dry-run mode with no API calls and optional live mode via Anthropic.
+---
 
-## Quickstart (5-minute dry-run)
+## Demo workflow (siêu nhanh)
 
-> Goal: run end-to-end locally without external credentials.
+1) Pull/Import performance (CSV hoặc connector)  
+2) Generate variations (dry-run hoặc live mode với LLM)  
+3) Copy `output/figma_variations.tsv`  
+4) Mở Figma → chạy plugin → tạo 100 frames từ template  
+5) Export PNG hàng loạt → đem đi test ads
 
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
+---
+
+## Yêu cầu trước khi chạy (Prerequisites)
+
+- **Git**
+- **Python 3.10+** (khuyến nghị 3.11)
+- (Tuỳ chọn) **Node.js 18+** — chỉ cần nếu bạn muốn build lại Figma plugin từ TypeScript
+
+---
+
+## Quickstart (5 phút, DRY-RUN, không cần key)
+
+### Windows (CMD)
+```bat
+git clone https://github.com/vansyson1308/growth-creative-factory.git
+cd growth-creative-factory
+
+py -m venv .venv
+.\.venv\Scripts\activate
+
+python -m pip install -U pip
 pip install -r requirements.txt
+
 python -m gcf --version
 python -m gcf run --input examples/ads_sample.csv --out output --mode dry
-pytest -v
 ```
 
-Windows helpers:
+### macOS / Linux
+```bash
+git clone https://github.com/vansyson1308/growth-creative-factory.git
+cd growth-creative-factory
 
-- `scripts\run_cli.bat`
-- `scripts\run_app.bat`
+python3 -m venv .venv
+source .venv/bin/activate
 
-## Demo workflow (5 steps)
+python -m pip install -U pip
+pip install -r requirements.txt
 
-1. **Pull data**: Export manually from ad platforms, or use connectors (`google-ads pull`, `meta-ads pull`).
-2. **Generate**: Run `python -m gcf run --mode dry|live ...`.
-3. **Paste TSV**: Open `output/figma_variations.tsv`, copy all rows.
-4. **Figma plugin**: Load `figma_plugin/manifest.json`, paste TSV into plugin UI, generate frames.
-   - If `figma_plugin/dist/code.js` is missing, build it with: `npx --yes tsc figma_plugin/code.ts --outDir figma_plugin/dist --target ES2017 --lib ES2017,DOM --noEmitOnError false`
-5. **Export PNG**: Use plugin export action for creative handoff.
+python -m gcf --version
+python -m gcf run --input examples/ads_sample.csv --out output --mode dry
+```
 
-## Bring Your Own Credentials (optional)
+Kết quả tạo ra:
+- `output/new_ads.csv`
+- `output/figma_variations.tsv` (**UTF-8 no BOM**)
+- `output/report.md`
 
-You only need credentials for services you choose to use:
+---
 
-- **Anthropic** (`live` mode only): `ANTHROPIC_API_KEY`
-- **Google Ads** connector: `GCF_GOOGLE_ADS_*` vars (see docs)
-- **Meta Ads** connector: `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`
-- **Google Sheets** connector: `GCF_GOOGLE_CREDS_JSON` / `GOOGLE_APPLICATION_CREDENTIALS`
+## Chạy UI (Streamlit)
 
-Use `.env.example` as your template and never commit secrets.
+```bash
+streamlit run app.py
+```
+
+App có wizard theo bước (Import → Select → Generate → Export) để marketing không cần biết code vẫn dùng được.
+
+---
+
+## Live mode (tuỳ chọn, có thể tốn phí)
+
+Nếu bạn muốn dùng LLM để “thông minh” hơn (selector/headline/description/checker), tạo file `.env` theo mẫu `.env.example`:
+
+```env
+ANTHROPIC_API_KEY=YOUR_KEY_HERE
+```
+
+Sau đó chạy (ví dụ):
+```bash
+python -m gcf run --input examples/ads_sample.csv --out output --mode live
+```
+
+> Lưu ý: Live mode sẽ gọi API và có thể tính phí theo token. Repo có guardrails (retry/backoff/caching/budget) tuỳ cấu hình.
+
+---
+
+## Figma Plugin (tạo hàng loạt + export PNG)
+
+### Import plugin
+1) Mở Figma  
+2) **Plugins → Development → Import plugin from manifest…**  
+3) Chọn file: `figma_plugin/manifest.json`
+
+### Chuẩn bị template trong Figma
+- Tạo một Frame làm template, ví dụ tên: `AD_TEMPLATE`
+- Trong frame, đặt tên các text layer theo mapping bạn dùng:
+  - `H1` (headline)
+  - `DESC` (description)
+  - (Tuỳ chọn) `CTA`, `H2`, ...
+
+### Dùng plugin
+- Chạy plugin
+- Paste nội dung từ `output/figma_variations.tsv`
+- Bấm Generate → plugin tạo tối đa **100 frames** và sắp grid
+- Export PNG hàng loạt ngay trong plugin (nếu bật)
+
+### Nếu thiếu `figma_plugin/dist/code.js` (hoặc bạn muốn build lại)
+```bash
+cd figma_plugin
+npm install
+npx tsc -p tsconfig.json
+```
+
+---
+
+## Input / Output format
+
+### Input CSV
+Bạn có thể dùng file CSV bất kỳ miễn là có các cột cần thiết (repo sẽ validate và báo thiếu cột rõ ràng).  
+Ví dụ sample: `examples/ads_sample.csv`
+
+### Output TSV cho Figma
+File `output/figma_variations.tsv` có header tối thiểu:
+- `H1` (headline)
+- `DESC` (description)
+- `TAG` (angle/tag/experiment label)
+
+---
+
+## Connectors (tuỳ chọn)
+
+Repo hỗ trợ **self-host + BYO credentials** để cộng đồng tự connect account của họ.
+
+### Google Ads (pull performance → CSV theo schema)
+```bash
+python -m gcf google-ads pull --customer_id <id> --date_range LAST_30_DAYS --out input/ads.csv
+```
+
+Hướng dẫn chi tiết: `docs/CONNECT_GOOGLE_ADS.md`
+
+### Meta Ads (pull insights → CSV theo schema)
+```bash
+python -m gcf meta-ads pull --date_preset last_30d --out input/ads.csv
+```
+
+Hướng dẫn chi tiết: `docs/CONNECT_META_ADS.md`
+
+### Google Sheets (handoff tuỳ chọn)
+Push output sang Google Sheets (dùng credentials của bạn):
+```bash
+python -m gcf sheets push --spreadsheet_id <id> --worksheet Variations --input output/figma_variations.tsv
+python -m gcf sheets push --spreadsheet_id <id> --worksheet Ads --input output/new_ads.csv
+```
+
+Hướng dẫn chi tiết: `docs/CONNECT_GOOGLE_SHEETS.md`
+
+---
+
+## Memory & Learning loop (tuỳ chọn)
+
+Tool có thể ghi log experiment (hypothesis / variants / tag / results) để lần sau generate tốt hơn.
+
+- Memory file: `memory/memory.jsonl`
+- Ingest results (ví dụ):
+```bash
+python -m gcf ingest-results --input results/performance.csv
+```
+
+---
 
 ## Troubleshooting
 
-- **529 overloaded / transient provider errors**: retry after backoff, reduce request load, or use dry mode.
-- **Missing columns**: ensure required schema fields are present in your CSV header.
-- **Font load failed in Figma**: ensure text layer fonts are installed/available in Figma and layer names match expected keys (`H1`, `DESC`).
-- **Auth errors for connectors / token invalid**: verify scopes, account permissions, credential paths, and token freshness.
-
-## Project structure
-
-```text
-gcf/            # Core package (pipeline, CLI, providers, validators)
-gcf/connectors/ # Optional data connectors (Google Ads, Meta Ads, Sheets)
-gcf/prompts/    # Prompt templates for generation/checking
-figma_plugin/   # Figma plugin source (manifest, UI, code)
-docs/           # Connector, privacy, and project docs
-examples/       # Synthetic sample inputs
-```
-
-## Contributing / Before pushing
-
-Run the formatting + lint + test script before opening a PR:
-
+### CI fail “Format check: would reformat”
+Chạy format trước khi push:
 ```bash
-# macOS/Linux
-bash scripts/format.sh
-
-# Windows
-scripts\format.bat
+black .
+ruff check . --fix
+pytest -q
 ```
 
-This keeps local results aligned with CI (`black --check .`, `ruff check .`, `pytest -q`).
+### Anthropic API 529 / overloaded
+Đây là lỗi server quá tải. Hãy retry, hoặc giảm số variants / bật cache / chạy lại sau.
 
-## Documentation
+### “Thiếu cột” khi import CSV
+Repo sẽ báo các cột bắt buộc bị thiếu. Hãy map cột đúng tên hoặc dùng schema unified output từ connectors.
 
-- [Documentation Index](docs/INDEX.md)
-- [Connect Google Ads](docs/CONNECT_GOOGLE_ADS.md)
-- [Connect Meta Ads](docs/CONNECT_META_ADS.md)
-- [Connect Google Sheets](docs/CONNECT_GOOGLE_SHEETS.md)
-- [Privacy](docs/PRIVACY.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
+### Figma plugin lỗi font
+Plugin sẽ cố load fonts; nếu có node font không load được, nó sẽ báo rõ và skip node thay vì crash.
 
-## Version
+---
 
-Current package version is exposed in `gcf.__version__` and via CLI:
+## Cấu trúc thư mục
 
+- `gcf/` — core pipeline, schema, providers, connectors
+- `prompts/` — prompt templates (selector/headline/description/checker)
+- `figma_plugin/` — plugin TypeScript + UI
+- `tests/` — pytest suite
+- `docs/` — tài liệu kết nối & hướng dẫn
+- `scripts/` — helper scripts (format/run)
+
+---
+
+## Đóng góp (Contributing)
+
+Xem `CONTRIBUTING.md`.  
+Trước khi PR, nên chạy:
 ```bash
-python -m gcf --version
+black .
+ruff check . --fix
+pytest -q
 ```
 
-## Roadmap
+---
 
-- Harden connector ergonomics and diagnostics.
-- Expand prompt/provider test coverage.
-- Publish reproducible release artifacts and tags.
-- Add optional containerized local dev workflow.
+## Bảo mật (Security)
+
+- Không commit `.env`, token, credentials JSON.
+- Xem `SECURITY.md` để report vulnerability.
+
+---
+
+## License
+
+MIT — xem `LICENSE`.
+
+---
 
 ## Credits
 
-Built by contributors focused on practical, local-first AI tooling for marketing creative operations.
+Cảm ơn cộng đồng OSS, và những chia sẻ workflow thực chiến về growth/creative automation đã truyền cảm hứng cho repo này.
