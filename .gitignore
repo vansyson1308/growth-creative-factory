@@ -1,22 +1,45 @@
-.env
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
 .venv/
 venv/
-output/*.csv
-output/*.tsv
-output/*.md
-memory/memory.jsonl
-.pytest_cache/
-dist/
-*.egg-info/
-node_modules/
-cache/
-__pycache__/
-*.pyc
+
+# Environment variables & local secrets
+.env
 *.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Credential directories/files
 credentials/
-token.json
-*.token.json
-*service-account*.json
+secrets/
 *credentials*.json
+*service-account*.json
+google-ads*.json
+oauth*.json
+
+# Local runtime/state artifacts
+cache/
+.cache/
+output/
+!output/.gitkeep
+memory/
+!memory/.gitkeep
+input/
+!input/.gitkeep
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

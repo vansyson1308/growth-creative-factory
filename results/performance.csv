@@ -1,8 +1,8 @@
 variant_set_id,campaign,ad_group,ad_id,ctr,cpa,roas,impr,clicks,conv,angle,notes
-vs_20260217141224_000,Summer_Sale,Group_A,AD001,0.025,38.5,4.2,12500,312,8,urgency,A/B test round 1
-vs_20260217141224_001,Winter_Launch,Group_B,AD003,0.018,55.0,2.8,8000,144,3,value_prop,A/B test round 1
-vs_20260217141224_002,Winter_Launch,Group_B,AD004,0.022,42.0,3.5,9500,209,5,social_proof,A/B test round 1
-vs_20260217141224_003,Tet_Campaign,Group_C,AD007,0.031,28.0,6.1,15000,465,12,seasonal,Tet special
-vs_20260218050423_000,Summer_Sale,Group_A,AD001,0.027,35.0,4.8,13000,351,9,urgency,A/B test round 2
-vs_20260218050423_001,Winter_Launch,Group_B,AD003,0.020,50.0,3.1,8500,170,4,value_prop,A/B test round 2
-vs_NOTEXIST_001,New_Campaign,Group_D,AD099,0.019,60.0,2.1,5000,95,2,discount,New experiment — no matching entry
+vs_20260217141224_000,SYNTH_Spring,Group_A,AD001,0.025,38.5,4.2,12500,312,8,urgency,Synthetic benchmark row 1
+vs_20260217141224_001,SYNTH_Summer,Group_C,AD004,0.018,55.0,2.8,8000,144,3,value_prop,Synthetic benchmark row 2
+vs_20260217141224_002,SYNTH_Autumn,Group_D,AD006,0.022,42.0,3.5,9500,209,5,social_proof,Synthetic benchmark row 3
+vs_20260217141224_003,SYNTH_Winter,Group_E,AD008,0.031,28.0,6.1,15000,465,12,seasonal,Synthetic benchmark row 4
+vs_20260218050423_000,SYNTH_Spring,Group_A,AD001,0.027,35.0,4.8,13000,351,9,urgency,Synthetic benchmark row 5
+vs_20260218050423_001,SYNTH_Summer,Group_A,AD003,0.020,50.0,3.1,8500,170,4,value_prop,Synthetic benchmark row 6
+vs_NOTEXIST_001,SYNTH_New,Group_X,AD099,0.019,60.0,2.1,5000,95,2,discount,Synthetic unmatched example

@@ -1,4 +1,5 @@
 """Tests for brand voice + compliance subagents."""
+
 from __future__ import annotations
 
 import json
@@ -33,10 +34,12 @@ class TestComplianceAgent:
 
 class TestBrandVoiceParser:
     def test_parses_brand_voice_json(self):
-        raw = json.dumps({
-            "guideline": "Keep tone clear and practical.",
-            "examples": ["Save time today.", "Try now for value."],
-        })
+        raw = json.dumps(
+            {
+                "guideline": "Keep tone clear and practical.",
+                "examples": ["Save time today.", "Try now for value."],
+            }
+        )
         out = _parse_brand_voice_json(raw)
         assert "Guideline:" in out
         assert "Examples:" in out

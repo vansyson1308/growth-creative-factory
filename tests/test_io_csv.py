@@ -1,22 +1,27 @@
 """Tests for io_csv helpers — focussed on the Figma TSV output."""
+
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-import pytest
 
-from gcf.io_csv import write_figma_tsv, write_handoff_csv, read_ads_csv, InputSchemaError
+from gcf.io_csv import (
+    write_figma_tsv,
+    write_handoff_csv,
+    read_ads_csv,
+    InputSchemaError,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_sample(tmp_path: Path) -> Path:
     rows = [
         {"H1": "Tiết kiệm ngay", "DESC": "Mua ngay để nhận ưu đãi.", "TAG": "V001"},
-        {"H1": "Ưu đãi có hạn",  "DESC": "Sản phẩm chất lượng cao.", "TAG": "V002"},
+        {"H1": "Ưu đãi có hạn", "DESC": "Sản phẩm chất lượng cao.", "TAG": "V002"},
     ]
     out = tmp_path / "figma_variations.tsv"
     write_figma_tsv(rows, out)
@@ -27,6 +32,7 @@ def _write_sample(tmp_path: Path) -> Path:
 # Encoding tests
 # ---------------------------------------------------------------------------
 
+
 class TestFigmaTsvEncoding:
     """figma_variations.tsv must be UTF-8 *without* BOM."""
 
@@ -35,9 +41,9 @@ class TestFigmaTsvEncoding:
         tsv = _write_sample(tmp_path)
         raw = tsv.read_bytes()
         bom = b"\xef\xbb\xbf"
-        assert not raw.startswith(bom), (
-            "TSV file starts with a UTF-8 BOM — Figma plugin expects no BOM."
-        )
+        assert not raw.startswith(
+            bom
+        ), "TSV file starts with a UTF-8 BOM — Figma plugin expects no BOM."
 
     def test_utf8_readable(self, tmp_path):
         """File must decode as UTF-8 without errors."""
@@ -58,6 +64,7 @@ class TestFigmaTsvEncoding:
 # Column order / schema tests
 # ---------------------------------------------------------------------------
 
+
 class TestFigmaTsvSchema:
     """Figma TSV must have exactly H1, DESC, TAG columns in that order."""
 
@@ -68,7 +75,11 @@ class TestFigmaTsvSchema:
 
     def test_row_count(self, tmp_path):
         tsv = _write_sample(tmp_path)
-        lines = [l for l in tsv.read_text(encoding="utf-8").splitlines() if l.strip()]
+        lines = [
+            line
+            for line in tsv.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         # header + 2 data rows
         assert len(lines) == 3
 

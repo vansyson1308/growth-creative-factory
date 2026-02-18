@@ -3,14 +3,14 @@
 Uses a LoggingProvider that records which prompt type was sent to generate(),
 then asserts the sequence: selector -> headline -> description -> checker.
 """
+
 from __future__ import annotations
 
 import json
 import os
 import sys
 import tempfile
-from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -52,13 +52,22 @@ class LoggingProvider:
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _make_config(tmp_dir: str):
     """Build a minimal AppConfig that doesn't touch disk (no cache, no memory)."""
     from gcf.config import (
-        AppConfig, SelectorConfig, GenerationConfig, DedupeConfig,
-        PolicyConfig, ProviderConfig, MemoryConfig, BudgetConfig,
-        RetryConfig, CacheConfig,
+        AppConfig,
+        SelectorConfig,
+        GenerationConfig,
+        DedupeConfig,
+        PolicyConfig,
+        ProviderConfig,
+        MemoryConfig,
+        BudgetConfig,
+        RetryConfig,
+        CacheConfig,
     )
+
     return AppConfig(
         selector=SelectorConfig(
             min_impressions=100,
@@ -98,17 +107,21 @@ def _make_config(tmp_dir: str):
 
 def _write_sample_csv(path: str):
     """Write a CSV with one clearly underperforming ad."""
-    df = pd.DataFrame([{
-        "ad_id": "ad_001",
-        "campaign": "CampaignA",
-        "ad_group": "GroupA",
-        "headline": "Sample Headline",
-        "description": "Sample description text here.",
-        "impressions": 5000,
-        "ctr": 0.005,     # below max_ctr=0.05 → underperforming
-        "cpa": 20.0,
-        "roas": 3.0,
-    }])
+    df = pd.DataFrame(
+        [
+            {
+                "ad_id": "ad_001",
+                "campaign": "CampaignA",
+                "ad_group": "GroupA",
+                "headline": "Sample Headline",
+                "description": "Sample description text here.",
+                "impressions": 5000,
+                "ctr": 0.005,  # below max_ctr=0.05 → underperforming
+                "cpa": 20.0,
+                "roas": 3.0,
+            }
+        ]
+    )
     df.to_csv(path, index=False)
 
 
@@ -116,11 +129,13 @@ def _write_sample_csv(path: str):
 # Tests
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestPipelineCallOrder:
     """Verifies that run_pipeline calls agents in the correct order."""
 
     def _run(self, tmp_path: str):
         from gcf.pipeline import run_pipeline
+
         cfg = _make_config(tmp_path)
         provider = LoggingProvider()
         csv_path = os.path.join(tmp_path, "ads.csv")
@@ -137,10 +152,10 @@ class TestPipelineCallOrder:
         assert summary["selected"] == 1, "Expected 1 underperforming ad"
         # Each underperforming ad triggers exactly 4 LLM calls in order
         assert len(log) == 4, f"Expected 4 LLM calls, got {len(log)}: {log}"
-        assert log[0] == "selector",     f"First call must be selector, got {log[0]}"
-        assert log[1] == "headline",     f"Second call must be headline, got {log[1]}"
-        assert log[2] == "description",  f"Third call must be description, got {log[2]}"
-        assert log[3] == "checker",      f"Fourth call must be checker, got {log[3]}"
+        assert log[0] == "selector", f"First call must be selector, got {log[0]}"
+        assert log[1] == "headline", f"Second call must be headline, got {log[1]}"
+        assert log[2] == "description", f"Third call must be description, got {log[2]}"
+        assert log[3] == "checker", f"Fourth call must be checker, got {log[3]}"
 
     def test_summary_has_checker_violations_key(self):
         """Summary dict must include checker_violations count."""
@@ -163,6 +178,7 @@ class TestPipelineCallOrder:
             out_dir = os.path.join(tmp, "output")
             _write_sample_csv(csv_path)
             from gcf.pipeline import run_pipeline
+
             run_pipeline(csv_path, out_dir, cfg, provider, mode="dry")
             assert os.path.exists(os.path.join(out_dir, "new_ads.csv"))
             assert os.path.exists(os.path.join(out_dir, "figma_variations.tsv"))
@@ -173,26 +189,31 @@ class TestPipelineCallOrder:
         """If no ads are underperforming, the LLM should never be called."""
         with tempfile.TemporaryDirectory() as tmp:
             from gcf.pipeline import run_pipeline
+
             cfg = _make_config(tmp)
             provider = LoggingProvider()
             csv_path = os.path.join(tmp, "ads.csv")
             out_dir = os.path.join(tmp, "output")
             # All-good ad: high CTR, low CPA, high ROAS
-            df = pd.DataFrame([{
-                "ad_id": "ad_ok",
-                "campaign": "CampOK",
-                "ad_group": "GrpOK",
-                "headline": "Good ad",
-                "description": "Perfect ad. Buy now!",
-                "impressions": 9999,
-                "clicks": 1500,
-                "cost": 120.0,
-                "conversions": 40,
-                "revenue": 900.0,
-                "ctr": 0.10,    # above max_ctr → not underperforming
-                "cpa": 3.0,     # below max_cpa
-                "roas": 7.5,    # above min_roas
-            }])
+            df = pd.DataFrame(
+                [
+                    {
+                        "ad_id": "ad_ok",
+                        "campaign": "CampOK",
+                        "ad_group": "GrpOK",
+                        "headline": "Good ad",
+                        "description": "Perfect ad. Buy now!",
+                        "impressions": 9999,
+                        "clicks": 1500,
+                        "cost": 120.0,
+                        "conversions": 40,
+                        "revenue": 900.0,
+                        "ctr": 0.10,  # above max_ctr → not underperforming
+                        "cpa": 3.0,  # below max_cpa
+                        "roas": 7.5,  # above min_roas
+                    }
+                ]
+            )
             df.to_csv(csv_path, index=False)
             summary = run_pipeline(csv_path, out_dir, cfg, provider, mode="dry")
         assert summary["selected"] == 0
@@ -202,34 +223,53 @@ class TestPipelineCallOrder:
         """With 2 underperforming ads, pattern must repeat for each."""
         with tempfile.TemporaryDirectory() as tmp:
             from gcf.pipeline import run_pipeline
+
             cfg = _make_config(tmp)
             provider = LoggingProvider()
             csv_path = os.path.join(tmp, "ads.csv")
             out_dir = os.path.join(tmp, "output")
-            df = pd.DataFrame([
-                {
-                    "ad_id": "ad_001", "campaign": "C1", "ad_group": "G1",
-                    "headline": "H1", "description": "D1",
-                    "impressions": 5000, "ctr": 0.001,
-                    "cpa": 20.0, "roas": 3.0,
-                },
-                {
-                    "ad_id": "ad_002", "campaign": "C2", "ad_group": "G2",
-                    "headline": "H2", "description": "D2",
-                    "impressions": 2000, "ctr": 0.002,
-                    "cpa": 30.0, "roas": 1.5,
-                },
-            ])
+            df = pd.DataFrame(
+                [
+                    {
+                        "ad_id": "ad_001",
+                        "campaign": "C1",
+                        "ad_group": "G1",
+                        "headline": "H1",
+                        "description": "D1",
+                        "impressions": 5000,
+                        "ctr": 0.001,
+                        "cpa": 20.0,
+                        "roas": 3.0,
+                    },
+                    {
+                        "ad_id": "ad_002",
+                        "campaign": "C2",
+                        "ad_group": "G2",
+                        "headline": "H2",
+                        "description": "D2",
+                        "impressions": 2000,
+                        "ctr": 0.002,
+                        "cpa": 30.0,
+                        "roas": 1.5,
+                    },
+                ]
+            )
             df.to_csv(csv_path, index=False)
             summary = run_pipeline(csv_path, out_dir, cfg, provider, mode="dry")
 
         assert summary["selected"] == 2
-        assert len(provider.call_log) == 8, f"Expected 8 calls (4 per ad): {provider.call_log}"
+        assert (
+            len(provider.call_log) == 8
+        ), f"Expected 8 calls (4 per ad): {provider.call_log}"
         # Each block of 4 must follow the pattern
         for offset in (0, 4):
-            block = provider.call_log[offset:offset + 4]
-            assert block == ["selector", "headline", "description", "checker"], \
-                f"Block at offset {offset} wrong: {block}"
+            block = provider.call_log[offset : offset + 4]
+            assert block == [
+                "selector",
+                "headline",
+                "description",
+                "checker",
+            ], f"Block at offset {offset} wrong: {block}"
 
 
 class TestDetectPromptType:
@@ -239,7 +279,7 @@ class TestDetectPromptType:
         prompt = (
             "You are an expert performance marketing analyst.\n"
             "Analyse the single underperforming ad below...\n"
-            "Return ONLY valid JSON: {\"ad_id\": ...}"
+            'Return ONLY valid JSON: {"ad_id": ...}'
         )
         assert _detect_prompt_type(prompt) == "selector"
 
@@ -307,16 +347,18 @@ class CheckerRetryProvider:
         if ptype == "checker":
             self._checker_calls += 1
             if self._checker_calls == 1:
-                return json.dumps({
-                    "violations": [
-                        {
-                            "type": "HEADLINE",
-                            "index": 0,
-                            "text": "bad headline",
-                            "issue": "ALL-CAPS word",
-                        }
-                    ]
-                })
+                return json.dumps(
+                    {
+                        "violations": [
+                            {
+                                "type": "HEADLINE",
+                                "index": 0,
+                                "text": "bad headline",
+                                "issue": "ALL-CAPS word",
+                            }
+                        ]
+                    }
+                )
             return json.dumps({"violations": []})
 
         if ptype == "headline" and "failed validation" in prompt.lower():
@@ -340,6 +382,7 @@ class TestPipelineCheckerRetry:
     def test_checker_failure_retries_only_failing_agent(self):
         with tempfile.TemporaryDirectory() as tmp:
             from gcf.pipeline import run_pipeline
+
             cfg = _make_config(tmp)
             cfg.generation.max_retries_validation = 2
             provider = CheckerRetryProvider()
@@ -351,7 +394,12 @@ class TestPipelineCheckerRetry:
 
         assert summary["selected"] == 1
         # Initial order + targeted headline retry + final checker
-        assert provider.call_log[:4] == ["selector", "headline", "description", "checker"]
+        assert provider.call_log[:4] == [
+            "selector",
+            "headline",
+            "description",
+            "checker",
+        ]
         assert provider.call_log.count("selector") == 1
         assert provider.call_log.count("description") == 1
         assert provider.call_log.count("headline") >= 2
@@ -362,6 +410,7 @@ class TestPipelineLiveModeSubagents:
     def test_live_mode_calls_brand_voice_agent(self):
         with tempfile.TemporaryDirectory() as tmp:
             from gcf.pipeline import run_pipeline
+
             cfg = _make_config(tmp)
             provider = LoggingProvider()
             csv_path = os.path.join(tmp, "ads.csv")
@@ -374,4 +423,3 @@ class TestPipelineLiveModeSubagents:
         assert provider.call_log[0] == "selector"
         assert "brand_voice" in provider.call_log
         assert "checker" in provider.call_log
-

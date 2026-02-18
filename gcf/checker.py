@@ -12,6 +12,7 @@ Usage::
         provider, headlines, descriptions, cfg
     )
 """
+
 from __future__ import annotations
 
 import json
@@ -31,6 +32,7 @@ _PROMPT_PATH = Path(__file__).parent / "prompts" / "checker_prompt.txt"
 # Template loader
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _load_template() -> Template:
     return Template(_PROMPT_PATH.read_text(encoding="utf-8"))
 
@@ -38,6 +40,7 @@ def _load_template() -> Template:
 # ─────────────────────────────────────────────────────────────────────────────
 # JSON parsing helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _parse_json_violations(raw: str) -> List[Dict]:
     """Extract ``violations`` from a strict JSON checker response.
@@ -66,6 +69,7 @@ def _parse_json_violations(raw: str) -> List[Dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def check_copy(
     provider: BaseProvider,
@@ -128,6 +132,8 @@ def check_copy(
             bad_description_idx.add(int(idx))
 
     clean_headlines = [h for i, h in enumerate(headlines) if i not in bad_headline_idx]
-    clean_descriptions = [d for i, d in enumerate(descriptions) if i not in bad_description_idx]
+    clean_descriptions = [
+        d for i, d in enumerate(descriptions) if i not in bad_description_idx
+    ]
 
     return clean_headlines, clean_descriptions, violations

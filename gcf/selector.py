@@ -1,10 +1,11 @@
 """Select underperforming ads and generate LLM-powered improvement strategies."""
+
 from __future__ import annotations
 
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import pandas as pd
 from jinja2 import Template
@@ -17,6 +18,7 @@ _STRATEGY_PROMPT_PATH = Path(__file__).parent / "prompts" / "selector_prompt.txt
 # ─────────────────────────────────────────────────────────────────────────────
 # Rule-based selection (unchanged)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def select_underperforming(
     df: pd.DataFrame,
@@ -50,12 +52,14 @@ def select_underperforming(
             r.append(f"CPA {row['cpa']:.2f} > {cfg.max_cpa}")
         if pd.notna(row["roas"]) and row["roas"] < cfg.min_roas:
             r.append(f"ROAS {row['roas']:.2f} < {cfg.min_roas}")
-        reasons.append({
-            "ad_id": row["ad_id"],
-            "campaign": row.get("campaign", ""),
-            "ad_group": row.get("ad_group", ""),
-            "reasons": "; ".join(r),
-        })
+        reasons.append(
+            {
+                "ad_id": row["ad_id"],
+                "campaign": row.get("campaign", ""),
+                "ad_group": row.get("ad_group", ""),
+                "reasons": "; ".join(r),
+            }
+        )
 
     return selected, reasons
 
@@ -63,6 +67,7 @@ def select_underperforming(
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM-powered strategy generation (new)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _load_strategy_template() -> Template:
     return Template(_STRATEGY_PROMPT_PATH.read_text(encoding="utf-8"))

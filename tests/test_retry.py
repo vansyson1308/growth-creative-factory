@@ -3,6 +3,7 @@
 Works without the real `anthropic` or `httpx` packages installed —
 the stubs in run_tests.py provide compatible exception classes.
 """
+
 from __future__ import annotations
 
 import os
@@ -18,6 +19,7 @@ from gcf.providers.anthropic_provider import AnthropicProvider, BudgetExceededEr
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _make_status_error(status_code: int, retry_after: str = None):
     """Build an APIStatusError-compatible object for testing."""
@@ -63,6 +65,7 @@ def _make_provider(max_retries: int = 2, max_calls: int = 10):
 # Happy path
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestSuccessPath:
     def test_success_returns_text(self):
         p = _make_provider()
@@ -102,6 +105,7 @@ class TestSuccessPath:
 # ─────────────────────────────────────────────────────────────────────────────
 # Retry on rate-limit / server errors
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestRetryLogic:
     def test_retry_on_429_then_success(self):
@@ -183,6 +187,7 @@ class TestRetryLogic:
 # Budget enforcement
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestBudget:
     def test_budget_exceeded_raises(self):
         p = _make_provider(max_calls=3)
@@ -214,14 +219,21 @@ class TestBudget:
 # Stats snapshot
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestStats:
     def test_stats_keys_present(self):
         p = _make_provider()
         p.client.messages.create.return_value = _make_success()
         p.generate("p")
         s = p.stats()
-        expected = {"call_count", "retry_count", "total_input_tokens",
-                    "total_output_tokens", "total_tokens", "last_error"}
+        expected = {
+            "call_count",
+            "retry_count",
+            "total_input_tokens",
+            "total_output_tokens",
+            "total_tokens",
+            "last_error",
+        }
         assert set(s.keys()) == expected
 
     def test_stats_initial_zeros(self):

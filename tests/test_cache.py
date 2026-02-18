@@ -1,11 +1,10 @@
 """Tests for gcf/cache.py — CacheStore and key helpers."""
+
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
-import pytest
 
 from gcf.cache import CacheStore, config_fingerprint, make_cache_key
 from gcf.config import AppConfig
@@ -15,6 +14,7 @@ from gcf.config import AppConfig
 # Helper
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _store(tmp: Path) -> CacheStore:
     return CacheStore(tmp / "test_cache.db")
 
@@ -22,6 +22,7 @@ def _store(tmp: Path) -> CacheStore:
 # ─────────────────────────────────────────────────────────────────────────────
 # CacheStore — basic get / set
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestCacheGetSet:
     def test_miss_returns_none(self, tmp_path):
@@ -43,7 +44,9 @@ class TestCacheGetSet:
         val = json.dumps(["Sale ngay!", "Mua hang nhanh", "Tiet kiem 50%"])
         s.set("unicode_key", val)
         assert json.loads(s.get("unicode_key")) == [
-            "Sale ngay!", "Mua hang nhanh", "Tiet kiem 50%"
+            "Sale ngay!",
+            "Mua hang nhanh",
+            "Tiet kiem 50%",
         ]
 
     def test_multiple_independent_keys(self, tmp_path):
@@ -62,6 +65,7 @@ class TestCacheGetSet:
 # ─────────────────────────────────────────────────────────────────────────────
 # CacheStore — stats
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestCacheStats:
     def test_initial_stats_zero(self, tmp_path):
@@ -84,12 +88,12 @@ class TestCacheStats:
     def test_hit_rate_calculation(self, tmp_path):
         s = _store(tmp_path)
         s.set("k1", "v1")
-        s.get("k1")    # hit
-        s.get("k1")    # hit
+        s.get("k1")  # hit
+        s.get("k1")  # hit
         s.get("miss")  # miss
         assert s.hits == 2
         assert s.misses == 1
-        assert abs(s.hit_rate() - 2/3) < 0.001
+        assert abs(s.hit_rate() - 2 / 3) < 0.001
 
     def test_hit_rate_zero_when_no_calls(self, tmp_path):
         assert _store(tmp_path).hit_rate() == 0.0
@@ -105,6 +109,7 @@ class TestCacheStats:
 # ─────────────────────────────────────────────────────────────────────────────
 # CacheStore — persistence
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestCachePersistence:
     def test_survives_reopen(self, tmp_path):
@@ -131,6 +136,7 @@ class TestCachePersistence:
 # make_cache_key
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestMakeCacheKey:
     def test_returns_64_char_hex(self):
         key = make_cache_key("AD001", '{"model":"claude"}', "improve CTR")
@@ -143,10 +149,14 @@ class TestMakeCacheKey:
         assert k1 == k2
 
     def test_different_ad_id_different_key(self):
-        assert make_cache_key("AD001", "cfg", "h") != make_cache_key("AD002", "cfg", "h")
+        assert make_cache_key("AD001", "cfg", "h") != make_cache_key(
+            "AD002", "cfg", "h"
+        )
 
     def test_different_hypothesis_different_key(self):
-        assert make_cache_key("AD001", "cfg", "CTR") != make_cache_key("AD001", "cfg", "ROAS")
+        assert make_cache_key("AD001", "cfg", "CTR") != make_cache_key(
+            "AD001", "cfg", "ROAS"
+        )
 
     def test_different_config_different_key(self):
         k1 = make_cache_key("AD001", '{"model":"a"}', "h")
@@ -161,6 +171,7 @@ class TestMakeCacheKey:
 # ─────────────────────────────────────────────────────────────────────────────
 # config_fingerprint
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestConfigFingerprint:
     def test_returns_json_string(self):

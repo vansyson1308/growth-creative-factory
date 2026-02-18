@@ -1,7 +1,7 @@
 """Load and validate config.yaml."""
+
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
@@ -23,39 +23,56 @@ class GenerationConfig:
     num_descriptions: int = 6
     max_headline_chars: int = 30
     max_description_chars: int = 90
-    retry_limit: int = 3               # kept for backward compat
+    retry_limit: int = 3  # kept for backward compat
     max_variants_per_run: int = 100
-    max_variants_headline: int = 5     # cap on headlines returned to pipeline
-    max_variants_desc: int = 3         # cap on descriptions returned to pipeline
-    max_retries_validation: int = 2    # validation-retry loops in generator
+    max_variants_headline: int = 5  # cap on headlines returned to pipeline
+    max_variants_desc: int = 3  # cap on descriptions returned to pipeline
+    max_retries_validation: int = 2  # validation-retry loops in generator
 
 
 @dataclass
 class DedupeConfig:
     similarity_threshold: int = 85
     min_distinct_angles: int = 3
-    angle_buckets: List[str] = field(default_factory=lambda: [
-        "benefit", "urgency", "social_proof", "problem_solution", "curiosity"
-    ])
+    angle_buckets: List[str] = field(
+        default_factory=lambda: [
+            "benefit",
+            "urgency",
+            "social_proof",
+            "problem_solution",
+            "curiosity",
+        ]
+    )
 
 
 @dataclass
 class PolicyConfig:
-    blocked_patterns: List[str] = field(default_factory=lambda: [
-        r"(?i)cam kết", r"(?i)tuyệt đối", r"(?i)\bno\.?\s*1\b",
-        r"(?i)\bbest\b", r"(?i)\bguarantee[d]?\b", r"(?i)\b#1\b", r"(?i)100%",
-    ])
-
-
+    blocked_patterns: List[str] = field(
+        default_factory=lambda: [
+            r"(?i)cam kết",
+            r"(?i)tuyệt đối",
+            r"(?i)\bno\.?\s*1\b",
+            r"(?i)\bbest\b",
+            r"(?i)\bguarantee[d]?\b",
+            r"(?i)\b#1\b",
+            r"(?i)100%",
+        ]
+    )
 
 
 @dataclass
 class BrandVoiceConfig:
     tone: str = "clear, credible, and action-oriented"
     audience: str = "prospects comparing options"
-    forbidden_words: List[str] = field(default_factory=lambda: [
-        "guarantee", "best", "no.1", "#1", "100%",
-    ])
+    forbidden_words: List[str] = field(
+        default_factory=lambda: [
+            "guarantee",
+            "best",
+            "no.1",
+            "#1",
+            "100%",
+        ]
+    )
 
 
 @dataclass
@@ -74,13 +91,15 @@ class MemoryConfig:
 @dataclass
 class BudgetConfig:
     """Hard caps to control live API spending."""
-    max_calls_per_run: int = 50          # total generate() calls; 0 = unlimited
-    daily_budget_tokens: int = 100_000   # informational (not enforced automatically)
+
+    max_calls_per_run: int = 50  # total generate() calls; 0 = unlimited
+    daily_budget_tokens: int = 100_000  # informational (not enforced automatically)
 
 
 @dataclass
 class RetryConfig:
     """Exponential-backoff settings for live API calls."""
+
     max_api_retries: int = 3
     backoff_base_seconds: float = 1.0
     backoff_max_seconds: float = 60.0
@@ -89,6 +108,7 @@ class RetryConfig:
 @dataclass
 class CacheConfig:
     """SQLite-backed LLM response cache."""
+
     enabled: bool = True
     path: str = "cache/llm_cache.db"
 

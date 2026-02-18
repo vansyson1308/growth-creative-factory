@@ -1,4 +1,5 @@
 """Configuration loader/validator for Meta Ads connector (BYO creds)."""
+
 from __future__ import annotations
 
 import os
@@ -16,7 +17,9 @@ class MetaAdsConfig:
     ad_account_id: str
     app_id: Optional[str] = None
     app_secret: Optional[str] = None
-    action_priority: List[str] = field(default_factory=lambda: ["purchase", "lead", "complete_registration"])
+    action_priority: List[str] = field(
+        default_factory=lambda: ["purchase", "lead", "complete_registration"]
+    )
 
 
 def _clean(v) -> str:

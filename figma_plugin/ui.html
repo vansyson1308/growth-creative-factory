@@ -113,7 +113,8 @@
     el('btnGenerate').onclick = () => {
       const templateName = el('templateName').value.trim() || 'AD_TEMPLATE';
       const tsvRaw = el('tsvInput').value.trim();
-      const maxFrames = parseInt(el('maxFrames').value, 10) || 100;
+      const rawMaxFrames = parseInt(el('maxFrames').value, 10) || 100;
+      const maxFrames = Math.min(Math.max(rawMaxFrames, 1), 100);
       const columns = parseInt(el('columns').value, 10) || 6;
       const gapX = parseInt(el('gapX').value, 10) || 40;
       const gapY = parseInt(el('gapY').value, 10) || 40;
@@ -145,7 +146,11 @@
         return;
       }
 
-      updateStatus(`⏳ Sending ${rows.length} variations...`);
+      if (rawMaxFrames > 100) {
+        updateStatus('⚠️ Max frames is capped at 100 for stability.');
+      }
+
+      updateStatus(`⏳ Sending ${Math.min(rows.length, maxFrames)} variations...`);
       parent.postMessage({
         pluginMessage: {
           type: 'generate',
@@ -163,7 +168,7 @@
     };
 
     function parseTSV(raw, fields) {
-      const lines = raw.split('\n').filter(l => l.trim());
+      const lines = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
       if (lines.length < 2) return [];
 
       const headers = lines[0].split('\t').map(h => h.trim());
@@ -175,7 +180,10 @@
       const h2Idx = fields.h2 ? idx(fields.h2) : -1;
       const tagIdx = idx(fields.tag);
 
-      if (h1Idx < 0 || descIdx < 0) return [];
+      if (h1Idx < 0 || descIdx < 0) {
+        updateStatus('❌ Required headers missing. Ensure H1 and DESC columns are present.');
+        return [];
+      }
 
       const data = [];
       for (let i = 1; i < lines.length; i++) {

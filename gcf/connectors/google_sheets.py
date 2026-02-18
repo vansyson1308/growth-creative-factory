@@ -1,4 +1,5 @@
 """Optional Google Sheets connector for handoff workflows."""
+
 from __future__ import annotations
 
 import os
@@ -6,6 +7,7 @@ from pathlib import Path
 from typing import List
 
 import pandas as pd
+
 try:
     import gspread  # type: ignore
 except Exception:  # pragma: no cover
@@ -22,7 +24,9 @@ class GoogleSheetsConfigError(RuntimeError):
 
 
 def _resolve_creds_path() -> str:
-    path = os.environ.get("GCF_GOOGLE_CREDS_JSON") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    path = os.environ.get("GCF_GOOGLE_CREDS_JSON") or os.environ.get(
+        "GOOGLE_APPLICATION_CREDENTIALS"
+    )
     if not path:
         raise GoogleSheetsConfigError(
             "Google credentials not configured. Set GCF_GOOGLE_CREDS_JSON or "

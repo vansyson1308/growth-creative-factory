@@ -1,4 +1,5 @@
 """Tests for deduplication/diversity module."""
+
 from gcf.dedupe import (
     dedupe,
     dedupe_texts,
@@ -38,7 +39,9 @@ class TestDiversityEngine:
     def test_detect_angle_bucket(self):
         assert detect_angle_bucket("Limited offer today") == "urgency"
         assert detect_angle_bucket("Trusted by 10k users") == "social_proof"
-        assert detect_angle_bucket("Solve your daily workflow pain") == "problem_solution"
+        assert (
+            detect_angle_bucket("Solve your daily workflow pain") == "problem_solution"
+        )
         assert detect_angle_bucket("Discover the secret trick") == "curiosity"
 
     def test_enforce_diversity_reports_missing(self):

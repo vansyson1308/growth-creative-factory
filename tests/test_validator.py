@@ -1,5 +1,5 @@
 """Tests for validator module."""
-import pytest
+
 from gcf.validator import (
     char_count,
     check_char_limit,
@@ -148,7 +148,9 @@ class TestValidateLimits:
     """
 
     def test_both_valid(self):
-        result = validate_limits("Sale ngay hôm nay", "Mua ngay để nhận ưu đãi tốt nhất.")
+        result = validate_limits(
+            "Sale ngay hôm nay", "Mua ngay để nhận ưu đãi tốt nhất."
+        )
         assert result["valid"] is True
         assert result["h1_errors"] == []
         assert result["desc_errors"] == []

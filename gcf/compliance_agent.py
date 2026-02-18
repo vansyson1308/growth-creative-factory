@@ -2,6 +2,7 @@
 
 This agent is intended for live mode only and can be skipped in dry-run.
 """
+
 from __future__ import annotations
 
 import re
@@ -48,15 +49,19 @@ def _scan_items(items: List[str], item_type: str) -> Tuple[List[str], List[Dict]
     failures: List[Dict] = []
 
     for idx, text in enumerate(items):
-        hit_reasons = [reason for pattern, reason in _RISK_PATTERNS if re.search(pattern, text)]
+        hit_reasons = [
+            reason for pattern, reason in _RISK_PATTERNS if re.search(pattern, text)
+        ]
         if hit_reasons:
-            failures.append({
-                "type": item_type,
-                "index": idx,
-                "text": text,
-                "reason": "; ".join(hit_reasons),
-                "suggestion": _suggest_revision(text),
-            })
+            failures.append(
+                {
+                    "type": item_type,
+                    "index": idx,
+                    "text": text,
+                    "reason": "; ".join(hit_reasons),
+                    "suggestion": _suggest_revision(text),
+                }
+            )
         else:
             clean.append(text)
 

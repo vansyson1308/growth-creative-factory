@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Growth Creative Factory — Figma Plugin (TypeScript source)
 // Compile with: npx tsc code.ts --outDir dist --target ES6 --lib ES6
 

@@ -1,4 +1,5 @@
 """Anthropic (Claude) provider with retry/backoff and budget tracking."""
+
 from __future__ import annotations
 
 import os
@@ -162,4 +163,4 @@ class AnthropicProvider(BaseProvider):
         base = self._retry_cfg.backoff_base_seconds
         cap = self._retry_cfg.backoff_max_seconds
         jitter = random.uniform(0.0, 1.0)
-        return min(base * (2 ** attempt) + jitter, cap)
+        return min(base * (2**attempt) + jitter, cap)

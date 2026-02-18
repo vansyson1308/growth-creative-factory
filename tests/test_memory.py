@@ -1,12 +1,11 @@
 """Tests for gcf.memory — schema, ingest, and analytics helpers."""
+
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from gcf.memory import (
     _normalize,
@@ -22,6 +21,7 @@ from gcf.memory import (
 # Fixtures / helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _write_entry(path: Path, **kwargs) -> None:
     """Helper: write a raw JSON line without going through append_entry."""
     with open(path, "a", encoding="utf-8") as f:
@@ -35,6 +35,7 @@ def _make_mem(tmp_path: Path) -> Path:
 # ─────────────────────────────────────────────────────────────────────────────
 # TestNormalize — backward-compatibility normalisation
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestNormalize:
     def test_old_schema_headlines_moved_to_generated(self):
@@ -94,6 +95,7 @@ class TestNormalize:
 # TestAppendEntry — new-schema writes
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestAppendEntry:
     def test_creates_file_if_missing(self, tmp_path):
         mem = _make_mem(tmp_path)
@@ -141,7 +143,11 @@ class TestAppendEntry:
                 variant_set_id=f"vs_{i:03d}",
                 generated={"headlines": [], "descriptions": []},
             )
-        lines = [l for l in mem.read_text(encoding="utf-8").splitlines() if l.strip()]
+        lines = [
+            line
+            for line in mem.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         assert len(lines) == 3
 
     def test_results_field_can_be_populated(self, tmp_path):
@@ -176,6 +182,7 @@ class TestAppendEntry:
 # ─────────────────────────────────────────────────────────────────────────────
 # TestLoadMemory — reading and normalising
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestLoadMemory:
     def test_empty_file_returns_empty_list(self, tmp_path):
@@ -255,6 +262,7 @@ class TestLoadMemory:
 # TestIngestPerformance — update-or-append logic
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TestIngestPerformance:
     def _seed(self, mem: Path, vsid: str, campaign: str = "C") -> None:
         append_entry(
@@ -281,12 +289,16 @@ class TestIngestPerformance:
     def test_append_unknown_variant_set(self, tmp_path):
         mem = _make_mem(tmp_path)
 
-        perf = pd.DataFrame([{
-            "variant_set_id": "vs_NOTEXIST",
-            "campaign": "New",
-            "roas": 2.1,
-            "cpa": 60.0,
-        }])
+        perf = pd.DataFrame(
+            [
+                {
+                    "variant_set_id": "vs_NOTEXIST",
+                    "campaign": "New",
+                    "roas": 2.1,
+                    "cpa": 60.0,
+                }
+            ]
+        )
         updated, appended = ingest_performance(mem, perf)
 
         assert updated == 0
@@ -300,10 +312,12 @@ class TestIngestPerformance:
         self._seed(mem, "vs_001")
         self._seed(mem, "vs_002")
 
-        perf = pd.DataFrame([
-            {"variant_set_id": "vs_001", "roas": 3.8},
-            {"variant_set_id": "vs_UNKNOWN", "roas": 1.9},
-        ])
+        perf = pd.DataFrame(
+            [
+                {"variant_set_id": "vs_001", "roas": 3.8},
+                {"variant_set_id": "vs_UNKNOWN", "roas": 1.9},
+            ]
+        )
         updated, appended = ingest_performance(mem, perf)
 
         assert updated == 1
@@ -329,12 +343,16 @@ class TestIngestPerformance:
         mem = _make_mem(tmp_path)
         self._seed(mem, "vs_001", campaign="OldCampaign")
 
-        perf = pd.DataFrame([{
-            "variant_set_id": "vs_001",
-            "campaign": "NewCampaign",
-            "angle": "urgency",
-            "roas": 3.0,
-        }])
+        perf = pd.DataFrame(
+            [
+                {
+                    "variant_set_id": "vs_001",
+                    "campaign": "NewCampaign",
+                    "angle": "urgency",
+                    "roas": 3.0,
+                }
+            ]
+        )
         ingest_performance(mem, perf)
 
         entries = load_memory(mem)
@@ -346,11 +364,15 @@ class TestIngestPerformance:
         mem = _make_mem(tmp_path)
         self._seed(mem, "vs_001")
 
-        perf = pd.DataFrame([{
-            "variant_set_id": "vs_001",
-            "roas": float("nan"),
-            "ctr": 0.02,
-        }])
+        perf = pd.DataFrame(
+            [
+                {
+                    "variant_set_id": "vs_001",
+                    "roas": float("nan"),
+                    "ctr": 0.02,
+                }
+            ]
+        )
         ingest_performance(mem, perf)
 
         entries = load_memory(mem)
@@ -366,17 +388,29 @@ class TestIngestPerformance:
         perf = pd.DataFrame([{"variant_set_id": "vs_001", "roas": 3.0}])
         ingest_performance(mem, perf)
 
-        lines = [l for l in mem.read_text(encoding="utf-8").splitlines() if l.strip()]
+        lines = [
+            line
+            for line in mem.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         assert len(lines) == 1  # One entry, rewritten in place
 
     def test_all_metrics_stored(self, tmp_path):
         mem = _make_mem(tmp_path)
 
-        perf = pd.DataFrame([{
-            "variant_set_id": "vs_001",
-            "ctr": 0.025, "cpa": 42.0, "roas": 3.8,
-            "impr": 12500, "clicks": 312, "conv": 8,
-        }])
+        perf = pd.DataFrame(
+            [
+                {
+                    "variant_set_id": "vs_001",
+                    "ctr": 0.025,
+                    "cpa": 42.0,
+                    "roas": 3.8,
+                    "impr": 12500,
+                    "clicks": 312,
+                    "conv": 8,
+                }
+            ]
+        )
         ingest_performance(mem, perf)
 
         entries = load_memory(mem)
@@ -393,16 +427,19 @@ class TestIngestPerformance:
 # TestGetTopAngles — analytics helper
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _make_entries_with_results(*angle_roas_pairs):
     """Return a list of normalised entries with results pre-set."""
     entries = []
     for angle, roas in angle_roas_pairs:
-        entries.append({
-            "angle": angle,
-            "campaign": "C",
-            "results": {"roas": roas, "cpa": 100.0 / roas, "ctr": roas / 100.0},
-            "generated": {"headlines": [], "descriptions": []},
-        })
+        entries.append(
+            {
+                "angle": angle,
+                "campaign": "C",
+                "results": {"roas": roas, "cpa": 100.0 / roas, "ctr": roas / 100.0},
+                "generated": {"headlines": [], "descriptions": []},
+            }
+        )
     return entries
 
 
@@ -435,11 +472,11 @@ class TestGetTopAngles:
 
     def test_sorted_by_cpa_ascending(self):
         entries = _make_entries_with_results(
-            ("urgency", 5.0),      # cpa = 20
-            ("social_proof", 2.0), # cpa = 50
+            ("urgency", 5.0),  # cpa = 20
+            ("social_proof", 2.0),  # cpa = 50
         )
         df = get_top_angles(entries, metric="cpa", ascending=True)
-        assert df.iloc[0]["angle"] == "urgency"   # lowest cpa first
+        assert df.iloc[0]["angle"] == "urgency"  # lowest cpa first
 
     def test_top_n_limit(self):
         entries = _make_entries_with_results(
@@ -459,23 +496,25 @@ class TestGetTopAngles:
 
     def test_no_angle_falls_back_to_label(self):
         entries = [
-            {"angle": "", "campaign": "C", "results": {"roas": 3.0},
-             "generated": {"headlines": [], "descriptions": []}},
+            {
+                "angle": "",
+                "campaign": "C",
+                "results": {"roas": 3.0},
+                "generated": {"headlines": [], "descriptions": []},
+            },
         ]
         df = get_top_angles(entries, metric="roas")
         assert df.iloc[0]["angle"] == "(no angle)"
 
     def test_best_column_is_max_for_roas(self):
-        entries = _make_entries_with_results(
-            ("urgency", 3.0), ("urgency", 7.0)
-        )
+        entries = _make_entries_with_results(("urgency", 3.0), ("urgency", 7.0))
         df = get_top_angles(entries, metric="roas")
         assert df.iloc[0]["best_roas"] == 7.0
 
     def test_best_column_is_min_for_cpa(self):
         entries = _make_entries_with_results(
-            ("urgency", 5.0),   # cpa = 20
-            ("urgency", 2.0),   # cpa = 50
+            ("urgency", 5.0),  # cpa = 20
+            ("urgency", 2.0),  # cpa = 50
         )
         df = get_top_angles(entries, metric="cpa", ascending=True)
         assert df.iloc[0]["best_cpa"] == 20.0
@@ -484,6 +523,7 @@ class TestGetTopAngles:
 # ─────────────────────────────────────────────────────────────────────────────
 # TestGetRecentExperiments — analytics helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class TestGetRecentExperiments:
     def test_empty_returns_empty_df(self):

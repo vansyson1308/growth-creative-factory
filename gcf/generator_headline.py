@@ -1,4 +1,5 @@
 """Headline generation sub-agent — strict JSON output, targeted retry."""
+
 from __future__ import annotations
 
 import json
@@ -20,6 +21,7 @@ _PROMPT_PATH = Path(__file__).parent / "prompts" / "headline_prompt.txt"
 # ─────────────────────────────────────────────────────────────────────────────
 # Template and JSON parsing
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _load_template() -> Template:
     return Template(_PROMPT_PATH.read_text(encoding="utf-8"))
@@ -44,7 +46,7 @@ def _parse_json_headlines(raw: str) -> List[str]:
         data = json.loads(text)
         items = data.get("headlines", [])
         if isinstance(items, list):
-            return [str(s).strip().strip('"\'') for s in items if str(s).strip()]
+            return [str(s).strip().strip("\"'") for s in items if str(s).strip()]
     except (json.JSONDecodeError, AttributeError):
         pass
 
@@ -54,6 +56,7 @@ def _parse_json_headlines(raw: str) -> List[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Targeted retry helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _build_retry_prompt(
     failures: List[Dict],
@@ -68,9 +71,7 @@ def _build_retry_prompt(
 
     Only sent when specific items failed — avoids re-generating the full set.
     """
-    failure_lines = "\n".join(
-        f"- '{f['text']}': {f['reason']}" for f in failures[:5]
-    )
+    failure_lines = "\n".join(f"- '{f['text']}': {f['reason']}" for f in failures[:5])
     diversity_line = ""
     if missing_angles:
         diversity_line = (
@@ -93,6 +94,7 @@ def _build_retry_prompt(
 # ─────────────────────────────────────────────────────────────────────────────
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def generate_headlines(
     provider: BaseProvider,
@@ -140,6 +142,7 @@ def generate_headlines(
     ad_group = ad_row.get("ad_group", "")
 
     missing_angles: List[str] = []
+    failures: List[Dict] = []
 
     for attempt in range(max_attempts):
         if attempt == 0:
@@ -166,14 +169,19 @@ def generate_headlines(
             if not failures and not missing_angles:
                 break
             prompt = _build_retry_prompt(
-                failures, needed, missing_angles, campaign, ad_group, strategy,
+                failures,
+                needed,
+                missing_angles,
+                campaign,
+                ad_group,
+                strategy,
                 gen_cfg.max_headline_chars,
             )
 
         raw = provider.generate(prompt, system="You are an expert ad copywriter.")
         candidates = _parse_json_headlines(raw)
 
-        failures: List[Dict] = []
+        failures = []
         attempt_valid: List[str] = []
 
         for c in candidates:
@@ -182,10 +190,12 @@ def generate_headlines(
                 attempt_valid.append(c)
             else:
                 fail_count += 1
-                failures.append({
-                    "text": c,
-                    "reason": "; ".join(result.get("errors", ["invalid"])),
-                })
+                failures.append(
+                    {
+                        "text": c,
+                        "reason": "; ".join(result.get("errors", ["invalid"])),
+                    }
+                )
 
         # Dedupe this batch and merge with previously accepted items
         attempt_valid = dedupe_texts(attempt_valid, cfg.dedupe.similarity_threshold)
@@ -254,10 +264,12 @@ def generate_headline_replacements(
             if result["valid"]:
                 valid.append(c)
             else:
-                next_failures.append({
-                    "text": c,
-                    "reason": "; ".join(result.get("errors", ["invalid"])),
-                })
+                next_failures.append(
+                    {
+                        "text": c,
+                        "reason": "; ".join(result.get("errors", ["invalid"])),
+                    }
+                )
 
         valid = dedupe_texts(valid, cfg.dedupe.similarity_threshold)
         if len(valid) >= needed:

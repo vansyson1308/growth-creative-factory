@@ -5,6 +5,7 @@ Usage:
   export GCF_GOOGLE_CLIENT_SECRET=...
   python scripts/google_ads_oauth.py
 """
+
 from __future__ import annotations
 
 import os
@@ -12,8 +13,12 @@ import sys
 
 
 def main() -> int:
-    client_id = os.environ.get("GCF_GOOGLE_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_ID")
-    client_secret = os.environ.get("GCF_GOOGLE_CLIENT_SECRET") or os.environ.get("GOOGLE_CLIENT_SECRET")
+    client_id = os.environ.get("GCF_GOOGLE_CLIENT_ID") or os.environ.get(
+        "GOOGLE_CLIENT_ID"
+    )
+    client_secret = os.environ.get("GCF_GOOGLE_CLIENT_SECRET") or os.environ.get(
+        "GOOGLE_CLIENT_SECRET"
+    )
 
     if not client_id or not client_secret:
         print(
@@ -26,7 +31,10 @@ def main() -> int:
     try:
         from google_auth_oauthlib.flow import InstalledAppFlow
     except Exception:
-        print("Missing dependency google-auth-oauthlib. Install it and retry.", file=sys.stderr)
+        print(
+            "Missing dependency google-auth-oauthlib. Install it and retry.",
+            file=sys.stderr,
+        )
         return 2
 
     scopes = ["https://www.googleapis.com/auth/adwords"]
