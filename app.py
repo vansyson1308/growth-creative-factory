@@ -1,10 +1,8 @@
-"""Streamlit 4-step Wizard — Growth Creative Factory.
+"""Streamlit app — Growth Creative Factory.
 
-Designed for non-dev marketing teams:
-  Step 1  Upload ads CSV + choose dry/live mode + (optionally) tweak thresholds
-  Step 2  Review auto-selected underperformers; un-tick any you want to skip
-  Step 3  Watch variations being generated; preview first 20 Figma rows; Approve
-  Step 4  Download new_ads.csv / figma_variations.tsv / report.md
+Two top-level tabs:
+  🧙 Wizard      — 4-step flow: Upload → Select → Generate → Export
+  📊 Learning Board — top angles, blacklist phrases, recent experiments
 """
 from __future__ import annotations
 
@@ -25,6 +23,12 @@ from gcf.generator_headline import generate_headlines
 from gcf.generator_description import generate_descriptions
 from gcf.pipeline import _format_report
 from gcf.providers.mock_provider import MockProvider
+from gcf.memory import (
+    append_entry,
+    load_memory,
+    get_top_angles,
+    get_recent_experiments,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -429,6 +433,21 @@ def _run_generation(
             })
             figma_rows.append({"H1": h, "DESC": d, "TAG": tag})
 
+        # ── Log to memory ────────────────────────────────────────────────────
+        try:
+            append_entry(
+                memory_path=cfg.memory.path,
+                campaign=ad.get("campaign", ""),
+                ad_group=ad.get("ad_group", ""),
+                ad_id=ad.get("ad_id", ""),
+                hypothesis=strategy,
+                variant_set_id=variant_set_id,
+                generated={"headlines": headlines, "descriptions": descriptions},
+                notes=f"mode={actual_mode}",
+            )
+        except Exception:
+            pass  # memory logging is non-critical; never block the wizard
+
         report_details.append({
             "ad_id":                  ad.get("ad_id", ""),
             "campaign":               ad.get("campaign", ""),
@@ -679,6 +698,192 @@ def step4() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Learning Board
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def learning_board() -> None:
+    """Render the Learning Board — insights from memory.jsonl."""
+    st.header("📊 Learning Board")
+    st.caption(
+        "Insights drawn from `memory/memory.jsonl`.  "
+        "Run `python -m gcf ingest-results --input results/performance.csv` "
+        "to load real performance data."
+    )
+
+    # Load config + memory
+    cfg = load_config("config.yaml")
+    entries = load_memory(cfg.memory.path)
+
+    n_entries = len(entries)
+    n_with_results = sum(1 for e in entries if e.get("results"))
+
+    # Top-level stats
+    mc1, mc2, mc3 = st.columns(3)
+    mc1.metric("Total experiments logged", n_entries)
+    mc2.metric("With performance results", n_with_results)
+    mc3.metric(
+        "Memory file",
+        Path(cfg.memory.path).name,
+        help=cfg.memory.path,
+    )
+
+    st.divider()
+
+    tab_angles, tab_blacklist, tab_recent = st.tabs(
+        ["🏆 Top Angles", "🚫 Blacklist Phrases", "🧪 Recent Experiments"]
+    )
+
+    # ── Tab 1 : Top Angles ───────────────────────────────────────────────────
+    with tab_angles:
+        st.subheader("Top creative angles by performance")
+        st.markdown(
+            "Angles are tags you supply in `results/performance.csv` (the `angle` column).  \n"
+            "Only experiments that have been ingested via `ingest-results` appear here."
+        )
+
+        if n_with_results == 0:
+            st.info(
+                "📭 No performance data yet.  \n\n"
+                "Run `python -m gcf ingest-results --input results/performance.csv` "
+                "to populate this section.",
+                icon="ℹ️",
+            )
+        else:
+            col_metric, col_n = st.columns([2, 1])
+            with col_metric:
+                sel_metric = st.selectbox(
+                    "Rank by",
+                    ["roas", "ctr", "cpa"],
+                    index=0,
+                    key="lb_metric",
+                )
+            with col_n:
+                top_n = st.number_input(
+                    "Show top N angles",
+                    value=10,
+                    min_value=1,
+                    max_value=50,
+                    step=1,
+                    key="lb_top_n",
+                )
+
+            ascending = sel_metric == "cpa"   # lower CPA = better
+            df_angles = get_top_angles(
+                entries,
+                metric=sel_metric,
+                n=int(top_n),
+                ascending=ascending,
+            )
+
+            if df_angles.empty:
+                st.warning(
+                    f"No entries have `{sel_metric}` in their results.  \n"
+                    "Check that your performance CSV includes that column.",
+                    icon="⚠️",
+                )
+            else:
+                # Pretty-format numeric columns
+                mean_col = f"mean_{sel_metric}"
+                best_col = f"best_{sel_metric}"
+                display = df_angles.copy()
+                for col in (mean_col, best_col):
+                    if col in display.columns:
+                        display[col] = display[col].apply(lambda x: f"{x:.3f}")
+
+                st.dataframe(display, use_container_width=True)
+                st.caption(
+                    f"{'↓ lower is better' if ascending else '↑ higher is better'} · "
+                    f"sorted by mean {sel_metric}"
+                )
+
+                # Bar chart
+                chart_df = df_angles.set_index("angle")[[mean_col]]
+                st.bar_chart(chart_df, use_container_width=True)
+
+    # ── Tab 2 : Blacklist Phrases ────────────────────────────────────────────
+    with tab_blacklist:
+        st.subheader("Blocked phrases & patterns")
+        st.markdown(
+            "These patterns are applied by the **policy checker** during generation.  \n"
+            "Any headline or description matching a pattern is **rejected** and regenerated.  \n\n"
+            "To add or remove patterns, edit `config.yaml` → `policy.blocked_patterns`."
+        )
+
+        patterns = cfg.policy.blocked_patterns
+        if not patterns:
+            st.info("No blocked patterns configured.", icon="ℹ️")
+        else:
+            rows = []
+            for p in patterns:
+                # Strip common regex wrappers for a human-readable preview
+                readable = p
+                for prefix in ("(?i)", r"(?i)"):
+                    readable = readable.replace(prefix, "")
+                readable = readable.strip().strip(r"\b").strip()
+                rows.append({"pattern (regex)": p, "readable": readable})
+
+            df_bl = pd.DataFrame(rows)
+            st.dataframe(df_bl, use_container_width=True)
+            st.caption(
+                f"{len(patterns)} blocked pattern(s) active. "
+                "Patterns use Python `re` syntax (case-insensitive where shown)."
+            )
+
+            with st.expander("📖 How policy checking works"):
+                st.markdown(
+                    """
+The pipeline checks every generated headline and description against
+each blocked pattern using `re.search(pattern, text)`.
+
+- If **any pattern matches**, the copy piece is **rejected** (counted as a fail).
+- Rejections are retried up to `generation.retry_limit` times (default: 3).
+- After retries are exhausted, the piece is dropped from the output.
+
+The fail count shown in Step 3 includes both char-limit failures and policy violations.
+                    """
+                )
+
+    # ── Tab 3 : Recent Experiments ───────────────────────────────────────────
+    with tab_recent:
+        st.subheader("Recent experiments")
+        st.markdown(
+            "The last 20 entries logged to `memory/memory.jsonl`, newest first.  \n"
+            "Each row represents one ad processed in one pipeline run."
+        )
+
+        if not entries:
+            st.info(
+                "📭 No experiments logged yet.  \n\n"
+                "Run the wizard (Steps 1–4) or use "
+                "`python -m gcf run --input examples/ads_sample.csv --out output` "
+                "to populate this log.",
+                icon="ℹ️",
+            )
+        else:
+            df_recent = get_recent_experiments(entries, n=20)
+
+            # Colour-code the results column
+            st.dataframe(df_recent, use_container_width=True)
+            st.caption(
+                f"Showing last {min(20, len(entries))} of {len(entries)} entries.  "
+                "✅ = performance results ingested · — = not yet measured."
+            )
+
+            # Download full memory as JSONL
+            try:
+                raw = Path(cfg.memory.path).read_bytes()
+                st.download_button(
+                    "⬇️ Download full memory.jsonl",
+                    data=raw,
+                    file_name="memory.jsonl",
+                    mime="application/jsonlines",
+                )
+            except FileNotFoundError:
+                pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -697,21 +902,27 @@ def main() -> None:
     st.title("🚀 Growth Creative Factory")
     st.caption("AI-powered ad variation pipeline · 4-step wizard for marketing teams")
 
-    _render_stepper(st.session_state.wizard_step)
+    tab_wizard, tab_board = st.tabs(["🧙 Wizard", "📊 Learning Board"])
 
-    step = st.session_state.wizard_step
-    if step == 1:
-        step1()
-    elif step == 2:
-        step2()
-    elif step == 3:
-        step3()
-    elif step == 4:
-        step4()
-    else:
-        st.error(f"Unknown step {step}. Resetting to Step 1.")
-        st.session_state.wizard_step = 1
-        st.rerun()
+    with tab_wizard:
+        _render_stepper(st.session_state.wizard_step)
+
+        step = st.session_state.wizard_step
+        if step == 1:
+            step1()
+        elif step == 2:
+            step2()
+        elif step == 3:
+            step3()
+        elif step == 4:
+            step4()
+        else:
+            st.error(f"Unknown step {step}. Resetting to Step 1.")
+            st.session_state.wizard_step = 1
+            st.rerun()
+
+    with tab_board:
+        learning_board()
 
 
 if __name__ == "__main__":

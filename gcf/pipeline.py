@@ -83,12 +83,13 @@ def run_pipeline(
         memory_ctx = _build_memory_context(cfg, ad.get("campaign", ""))
 
         # Generate
-        headlines = generate_headlines(provider, ad, strategy, cfg, memory_ctx)
-        descriptions = generate_descriptions(provider, ad, strategy, cfg, memory_ctx)
+        headlines, h_fail = generate_headlines(provider, ad, strategy, cfg, memory_ctx)
+        descriptions, d_fail = generate_descriptions(provider, ad, strategy, cfg, memory_ctx)
 
         h_count = len(headlines)
         d_count = len(descriptions)
         total_pass += h_count + d_count
+        total_fail += h_fail + d_fail
 
         # Create variant set
         variant_set_id = f"vs_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{idx:03d}"
@@ -117,10 +118,11 @@ def run_pipeline(
         append_entry(
             memory_path=cfg.memory.path,
             campaign=ad.get("campaign", ""),
+            ad_group=ad.get("ad_group", ""),
+            ad_id=ad.get("ad_id", ""),
             hypothesis=strategy,
             variant_set_id=variant_set_id,
-            inputs={"ad_id": ad.get("ad_id", ""), "issue": ad["_issue"]},
-            outputs={"headlines": headlines, "descriptions": descriptions},
+            generated={"headlines": headlines, "descriptions": descriptions},
             notes=f"mode={mode}",
         )
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from gcf.config import load_config
 from gcf.pipeline import run_pipeline
-from gcf.io_csv import read_performance_csv
+from gcf.io_csv import read_performance_csv, InputSchemaError
 from gcf.memory import ingest_performance
 
 
@@ -51,13 +51,18 @@ def run(input_path: str, output_dir: str, mode: str, config_path: str):
     click.echo(f"📂 Input:  {input_path}")
     click.echo(f"📂 Output: {output_dir}")
 
-    summary = run_pipeline(input_path, output_dir, cfg, provider, mode)
+    try:
+        summary = run_pipeline(input_path, output_dir, cfg, provider, mode)
+    except InputSchemaError as exc:
+        raise click.ClickException(str(exc))
 
     click.echo("")
     click.echo("✅ Pipeline complete!")
     click.echo(f"   Ads analyzed:  {summary['total_ads']}")
     click.echo(f"   Underperforming: {summary['selected']}")
     click.echo(f"   Variants created: {summary['variants_generated']}")
+    click.echo(f"   Validation passed: {summary['pass_count']}")
+    click.echo(f"   Validation failed: {summary['fail_count']}")
     click.echo(f"   Files written to: {output_dir}/")
 
 
@@ -69,11 +74,16 @@ def ingest_results(input_path: str, config_path: str):
     cfg = load_config(config_path)
 
     click.echo(f"📊 Ingesting results from: {input_path}")
+    click.echo(f"📂 Memory file: {cfg.memory.path}")
 
     perf_df = read_performance_csv(input_path)
-    count = ingest_performance(cfg.memory.path, perf_df)
+    updated, appended = ingest_performance(cfg.memory.path, perf_df)
 
-    click.echo(f"✅ Ingested {count} rows into {cfg.memory.path}")
+    click.echo("")
+    click.echo("✅ Ingest complete!")
+    click.echo(f"   Existing entries updated : {updated}")
+    click.echo(f"   New entries appended      : {appended}")
+    click.echo(f"   Total rows processed      : {updated + appended}")
 
 
 if __name__ == "__main__":
