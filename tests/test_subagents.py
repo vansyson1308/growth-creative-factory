@@ -8,8 +8,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from gcf.compliance_agent import filter_risky_claims
 from gcf.brand_voice_agent import _parse_brand_voice_json
+from gcf.compliance_agent import filter_risky_claims
 
 
 class TestComplianceAgent:

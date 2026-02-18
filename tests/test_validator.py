@@ -1,15 +1,15 @@
 """Tests for validator module."""
 
+from gcf.config import PolicyConfig
 from gcf.validator import (
     char_count,
     check_char_limit,
     check_not_all_caps,
     check_policy,
-    validate_headline,
     validate_description,
+    validate_headline,
     validate_limits,
 )
-from gcf.config import PolicyConfig
 
 
 class TestCharCount:

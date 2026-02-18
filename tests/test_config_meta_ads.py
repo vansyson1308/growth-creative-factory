@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from gcf.config_meta_ads import load_meta_ads_config, MetaAdsConfigError
+from gcf.config_meta_ads import MetaAdsConfigError, load_meta_ads_config
 
 
 def test_load_meta_ads_config_success():

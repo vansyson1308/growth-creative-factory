@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from gcf.mappers import map_dataframe_to_adsrows, adsrows_to_dataframe
+from gcf.mappers import adsrows_to_dataframe, map_dataframe_to_adsrows
 
 
 def test_map_csv_to_adsrow_recomputes_metrics():

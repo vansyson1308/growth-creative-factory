@@ -66,6 +66,20 @@ docs/           # Connector, privacy, and project docs
 examples/       # Synthetic sample inputs
 ```
 
+## Contributing / Before pushing
+
+Run the formatting + lint + test script before opening a PR:
+
+```bash
+# macOS/Linux
+bash scripts/format.sh
+
+# Windows
+scripts\format.bat
+```
+
+This keeps local results aligned with CI (`black --check .`, `ruff check .`, `pytest -q`).
+
 ## Documentation
 
 - [Documentation Index](docs/INDEX.md)

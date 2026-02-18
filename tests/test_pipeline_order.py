@@ -19,8 +19,7 @@ import pandas as pd
 # ─────────────────────────────────────────────────────────────────────────────
 # LoggingProvider — detects prompt type and records calls
 # ─────────────────────────────────────────────────────────────────────────────
-
-from gcf.providers.mock_provider import _detect_prompt_type, MockProvider
+from gcf.providers.mock_provider import MockProvider, _detect_prompt_type
 
 
 class LoggingProvider:
@@ -57,15 +56,15 @@ def _make_config(tmp_dir: str):
     """Build a minimal AppConfig that doesn't touch disk (no cache, no memory)."""
     from gcf.config import (
         AppConfig,
-        SelectorConfig,
-        GenerationConfig,
+        BudgetConfig,
+        CacheConfig,
         DedupeConfig,
+        GenerationConfig,
+        MemoryConfig,
         PolicyConfig,
         ProviderConfig,
-        MemoryConfig,
-        BudgetConfig,
         RetryConfig,
-        CacheConfig,
+        SelectorConfig,
     )
 
     return AppConfig(

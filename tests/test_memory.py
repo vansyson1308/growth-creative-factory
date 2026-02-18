@@ -10,12 +10,11 @@ import pandas as pd
 from gcf.memory import (
     _normalize,
     append_entry,
-    load_memory,
-    ingest_performance,
-    get_top_angles,
     get_recent_experiments,
+    get_top_angles,
+    ingest_performance,
+    load_memory,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures / helpers

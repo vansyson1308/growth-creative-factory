@@ -8,7 +8,6 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Tuple
 
-
 _RISK_PATTERNS = [
     (r"(?i)\bguarantee(?:d)?\b", "Absolute guarantee claim"),
     (r"(?i)\bbest\b", "Unsubstantiated superlative ('best')"),

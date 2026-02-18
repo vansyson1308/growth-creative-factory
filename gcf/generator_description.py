@@ -9,11 +9,11 @@ from typing import Dict, List, Optional
 
 from jinja2 import Template
 
-from gcf.cache import CacheStore, make_cache_key, config_fingerprint
+from gcf.cache import CacheStore, config_fingerprint, make_cache_key
 from gcf.config import AppConfig
+from gcf.dedupe import dedupe_texts, enforce_diversity
 from gcf.providers.base import BaseProvider
 from gcf.validator import validate_description
-from gcf.dedupe import dedupe_texts, enforce_diversity
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "description_prompt.txt"
 

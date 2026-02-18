@@ -130,8 +130,8 @@ def pull_meta_ads_rows(
 
     if ad_account is None:
         try:
-            from facebook_business.api import FacebookAdsApi
             from facebook_business.adobjects.adaccount import AdAccount
+            from facebook_business.api import FacebookAdsApi
         except Exception as exc:  # pragma: no cover
             raise MetaAdsConnectorError(
                 "facebook_business SDK missing. Install `facebook-business` and retry."

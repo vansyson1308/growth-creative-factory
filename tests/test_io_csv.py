@@ -4,14 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 from gcf.io_csv import (
+    InputSchemaError,
+    read_ads_csv,
     write_figma_tsv,
     write_handoff_csv,
-    read_ads_csv,
-    InputSchemaError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

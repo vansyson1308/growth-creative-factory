@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 from gcf.checker import _parse_json_violations, check_copy
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Minimal stubs
 # ─────────────────────────────────────────────────────────────────────────────

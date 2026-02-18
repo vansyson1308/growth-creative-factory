@@ -9,12 +9,11 @@ from __future__ import annotations
 import os
 from unittest.mock import MagicMock, patch
 
-import pytest
 import anthropic  # provided by stub or real package
+import pytest
 
-from gcf.config import RetryConfig, BudgetConfig
+from gcf.config import BudgetConfig, RetryConfig
 from gcf.providers.anthropic_provider import AnthropicProvider, BudgetExceededError
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers

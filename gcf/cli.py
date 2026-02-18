@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import click
 
-from gcf.config import load_config
-from gcf.pipeline import run_pipeline
-from gcf.io_csv import read_performance_csv, InputSchemaError
-from gcf.memory import ingest_performance
-from gcf.connectors.google_sheets import push_tabular_file, GoogleSheetsConfigError
-from gcf.connectors.google_ads import pull_google_ads_rows, GoogleAdsConnectorError
-from gcf.connectors.meta_ads import pull_meta_ads_rows, MetaAdsConnectorError
 from gcf import __version__
+from gcf.config import load_config
+from gcf.connectors.google_ads import GoogleAdsConnectorError, pull_google_ads_rows
+from gcf.connectors.google_sheets import GoogleSheetsConfigError, push_tabular_file
+from gcf.connectors.meta_ads import MetaAdsConnectorError, pull_meta_ads_rows
+from gcf.io_csv import InputSchemaError, read_performance_csv
+from gcf.memory import ingest_performance
+from gcf.pipeline import run_pipeline
 
 
 def _get_provider(cfg, mode: str):

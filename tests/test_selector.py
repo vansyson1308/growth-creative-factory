@@ -1,8 +1,9 @@
 """Tests for selector module."""
 
 import pandas as pd
-from gcf.selector import select_underperforming
+
 from gcf.config import SelectorConfig
+from gcf.selector import select_underperforming
 
 
 def _make_df(rows):

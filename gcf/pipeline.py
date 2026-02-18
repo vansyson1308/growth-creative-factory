@@ -7,26 +7,25 @@ from itertools import product as itertools_product
 from pathlib import Path
 from typing import Dict, List
 
-
+from gcf.brand_voice_agent import generate_brand_voice_guideline
+from gcf.checker import check_copy
+from gcf.compliance_agent import filter_risky_claims
 from gcf.config import AppConfig
+from gcf.generator_description import (
+    generate_description_replacements,
+    generate_descriptions,
+)
+from gcf.generator_headline import generate_headline_replacements, generate_headlines
 from gcf.io_csv import (
     read_ads_csv,
     write_figma_tsv,
-    write_new_ads_csv,
     write_handoff_csv,
+    write_new_ads_csv,
     write_report,
 )
-from gcf.selector import select_underperforming, generate_strategy
-from gcf.generator_headline import generate_headlines, generate_headline_replacements
-from gcf.generator_description import (
-    generate_descriptions,
-    generate_description_replacements,
-)
-from gcf.checker import check_copy
-from gcf.brand_voice_agent import generate_brand_voice_guideline
-from gcf.compliance_agent import filter_risky_claims
 from gcf.memory import append_entry, load_memory
 from gcf.providers.base import BaseProvider
+from gcf.selector import generate_strategy, select_underperforming
 
 
 def _build_memory_context(cfg: AppConfig, campaign: str) -> str:

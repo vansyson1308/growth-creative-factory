@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gcf.connectors.google_sheets import push_tabular_file, GoogleSheetsConfigError
+from gcf.connectors.google_sheets import GoogleSheetsConfigError, push_tabular_file
 
 
 def test_missing_credentials_raises(tmp_path):
