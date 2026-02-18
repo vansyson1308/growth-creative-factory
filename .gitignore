@@ -14,3 +14,9 @@ node_modules/
 cache/
 __pycache__/
 *.pyc
+*.env
+credentials/
+token.json
+*.token.json
+*service-account*.json
+*credentials*.json

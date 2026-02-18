@@ -5,25 +5,25 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Inter, system-ui, sans-serif; font-size: 12px; padding: 12px; color: #333; }
     h2 { font-size: 14px; margin-bottom: 8px; }
+    h3 { font-size: 12px; margin: 10px 0 6px; color: #444; }
     label { display: block; font-weight: 600; margin: 8px 0 4px; }
     input[type="text"], textarea {
       width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px;
       font-size: 12px; font-family: inherit;
     }
-    textarea { height: 160px; resize: vertical; font-family: monospace; }
+    textarea { height: 170px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .btn {
       display: inline-block; padding: 8px 16px; border: none; border-radius: 6px;
       font-size: 12px; font-weight: 600; cursor: pointer; margin: 4px 4px 4px 0;
     }
     .btn-primary { background: #18A0FB; color: #fff; }
     .btn-primary:hover { background: #0D8DE8; }
-    .btn-secondary { background: #E8E8E8; color: #333; }
-    .btn-secondary:hover { background: #D5D5D5; }
     .btn-export { background: #7B61FF; color: #fff; }
     .btn-export:hover { background: #6A4FE8; }
     .info { font-size: 11px; color: #666; margin: 4px 0; }
-    .status { margin-top: 8px; padding: 8px; border-radius: 4px; background: #F0F0F0; font-size: 11px; }
-    hr { margin: 12px 0; border: none; border-top: 1px solid #eee; }
+    .status { margin-top: 8px; padding: 8px; border-radius: 4px; background: #F0F0F0; font-size: 11px; white-space: pre-wrap; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .section { border: 1px solid #eee; border-radius: 6px; padding: 8px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -31,88 +31,184 @@
 
   <label for="templateName">Template frame name</label>
   <input type="text" id="templateName" value="AD_TEMPLATE" placeholder="AD_TEMPLATE" />
-  <p class="info">The frame in your Figma file that contains H1, DESC (and optional CTA, H2) text nodes.</p>
+  <p class="info">Use any frame name. Default is AD_TEMPLATE.</p>
 
-  <label for="tsvInput">Paste TSV data (H1 → DESC → TAG)</label>
-  <textarea id="tsvInput" placeholder="H1&#9;DESC&#9;TAG&#10;Tiết kiệm ngay&#9;Đăng ký nhận ưu đãi độc quyền!&#9;V001"></textarea>
-  <p class="info">Paste directly from figma_variations.tsv. First row = header (skipped).</p>
+  <div class="section">
+    <h3>TSV Mapping (Field → Layer)</h3>
+    <div class="grid2">
+      <div>
+        <label for="h1Field">H1 field (TSV header)</label>
+        <input type="text" id="h1Field" value="H1" />
+      </div>
+      <div>
+        <label for="h1Node">H1 node name (Figma)</label>
+        <input type="text" id="h1Node" value="H1" />
+      </div>
 
-  <label for="maxFrames">Max frames to generate</label>
-  <input type="text" id="maxFrames" value="100" />
+      <div>
+        <label for="descField">DESC field (TSV header)</label>
+        <input type="text" id="descField" value="DESC" />
+      </div>
+      <div>
+        <label for="descNode">DESC node name (Figma)</label>
+        <input type="text" id="descNode" value="DESC" />
+      </div>
+
+      <div>
+        <label for="ctaField">CTA field (optional)</label>
+        <input type="text" id="ctaField" value="CTA" />
+      </div>
+      <div>
+        <label for="ctaNode">CTA node name (optional)</label>
+        <input type="text" id="ctaNode" value="CTA" />
+      </div>
+
+      <div>
+        <label for="h2Field">H2 field (optional)</label>
+        <input type="text" id="h2Field" value="H2" />
+      </div>
+      <div>
+        <label for="h2Node">H2 node name (optional)</label>
+        <input type="text" id="h2Node" value="H2" />
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Grid Placement</h3>
+    <div class="grid2">
+      <div>
+        <label for="columns">Columns</label>
+        <input type="text" id="columns" value="6" />
+      </div>
+      <div>
+        <label for="maxFrames">Max frames</label>
+        <input type="text" id="maxFrames" value="100" />
+      </div>
+      <div>
+        <label for="gapX">Horizontal spacing</label>
+        <input type="text" id="gapX" value="40" />
+      </div>
+      <div>
+        <label for="gapY">Vertical spacing</label>
+        <input type="text" id="gapY" value="40" />
+      </div>
+    </div>
+  </div>
+
+  <label for="tsvInput">Paste TSV data</label>
+  <textarea id="tsvInput" placeholder="H1&#9;DESC&#9;TAG&#10;Save today&#9;Shop now for limited offers&#9;V001"></textarea>
+  <p class="info">Header row is required. Supports optional CTA/H2 columns.</p>
 
   <div style="margin-top: 12px;">
     <button class="btn btn-primary" id="btnGenerate">▶ Generate Variations</button>
     <button class="btn btn-export" id="btnExport">📷 Export PNGs</button>
   </div>
 
-  <div class="status" id="status">Ready. Select your template frame and paste TSV data above.</div>
+  <div class="status" id="status">Ready.</div>
 
   <script>
-    document.getElementById('btnGenerate').onclick = () => {
-      const templateName = document.getElementById('templateName').value.trim();
-      const tsvRaw = document.getElementById('tsvInput').value.trim();
-      const maxFrames = parseInt(document.getElementById('maxFrames').value, 10) || 100;
+    const el = (id) => document.getElementById(id);
+
+    el('btnGenerate').onclick = () => {
+      const templateName = el('templateName').value.trim() || 'AD_TEMPLATE';
+      const tsvRaw = el('tsvInput').value.trim();
+      const maxFrames = parseInt(el('maxFrames').value, 10) || 100;
+      const columns = parseInt(el('columns').value, 10) || 6;
+      const gapX = parseInt(el('gapX').value, 10) || 40;
+      const gapY = parseInt(el('gapY').value, 10) || 40;
 
       if (!tsvRaw) {
         updateStatus('❌ Please paste TSV data.');
         return;
       }
 
-      const rows = parseTSV(tsvRaw);
+      const mapping = {
+        fields: {
+          h1: el('h1Field').value.trim() || 'H1',
+          desc: el('descField').value.trim() || 'DESC',
+          cta: el('ctaField').value.trim(),
+          h2: el('h2Field').value.trim(),
+          tag: 'TAG',
+        },
+        nodes: {
+          h1Node: el('h1Node').value.trim() || 'H1',
+          descNode: el('descNode').value.trim() || 'DESC',
+          ctaNode: el('ctaNode').value.trim(),
+          h2Node: el('h2Node').value.trim(),
+        }
+      };
+
+      const rows = parseTSV(tsvRaw, mapping.fields);
       if (rows.length === 0) {
-        updateStatus('❌ No valid data rows found.');
+        updateStatus('❌ No valid data rows found. Check headers/mapping.');
         return;
       }
 
-      updateStatus(`⏳ Sending ${rows.length} variations to Figma...`);
-
+      updateStatus(`⏳ Sending ${rows.length} variations...`);
       parent.postMessage({
         pluginMessage: {
           type: 'generate',
           templateName,
           rows: rows.slice(0, maxFrames),
+          mapping: mapping.nodes,
+          grid: { columns, gapX, gapY }
         }
       }, '*');
     };
 
-    document.getElementById('btnExport').onclick = () => {
+    el('btnExport').onclick = () => {
       updateStatus('⏳ Exporting PNGs...');
-      parent.postMessage({
-        pluginMessage: { type: 'export-pngs' }
-      }, '*');
+      parent.postMessage({ pluginMessage: { type: 'export-pngs' } }, '*');
     };
 
-    function parseTSV(raw) {
+    function parseTSV(raw, fields) {
       const lines = raw.split('\n').filter(l => l.trim());
       if (lines.length < 2) return [];
-      // Skip header
+
+      const headers = lines[0].split('\t').map(h => h.trim());
+      const idx = (name) => headers.findIndex(h => h.toUpperCase() === String(name || '').toUpperCase());
+
+      const h1Idx = idx(fields.h1);
+      const descIdx = idx(fields.desc);
+      const ctaIdx = fields.cta ? idx(fields.cta) : -1;
+      const h2Idx = fields.h2 ? idx(fields.h2) : -1;
+      const tagIdx = idx(fields.tag);
+
+      if (h1Idx < 0 || descIdx < 0) return [];
+
       const data = [];
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split('\t');
-        if (cols.length >= 2) {
-          data.push({
-            H1: cols[0] ? cols[0].trim() : '',
-            DESC: cols[1] ? cols[1].trim() : '',
-            TAG: cols[2] ? cols[2].trim() : ('V' + String(i).padStart(3, '0')),
-          });
-        }
+        const h1 = cols[h1Idx] ? cols[h1Idx].trim() : '';
+        const desc = cols[descIdx] ? cols[descIdx].trim() : '';
+        if (!h1 && !desc) continue;
+
+        data.push({
+          H1: h1,
+          DESC: desc,
+          CTA: ctaIdx >= 0 && cols[ctaIdx] ? cols[ctaIdx].trim() : '',
+          H2: h2Idx >= 0 && cols[h2Idx] ? cols[h2Idx].trim() : '',
+          TAG: tagIdx >= 0 && cols[tagIdx] ? cols[tagIdx].trim() : ('V' + String(i).padStart(3, '0')),
+        });
       }
       return data;
     }
 
     function updateStatus(msg) {
-      document.getElementById('status').textContent = msg;
+      el('status').textContent = msg;
     }
 
-    // Listen for messages from plugin code
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
       if (!msg) return;
+
       if (msg.type === 'status') {
         updateStatus(msg.text);
+        return;
       }
+
       if (msg.type === 'export-done') {
-        // Trigger download for each PNG
         if (msg.files && msg.files.length > 0) {
           msg.files.forEach((f) => {
             const a = document.createElement('a');

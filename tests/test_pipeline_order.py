@@ -167,6 +167,7 @@ class TestPipelineCallOrder:
             assert os.path.exists(os.path.join(out_dir, "new_ads.csv"))
             assert os.path.exists(os.path.join(out_dir, "figma_variations.tsv"))
             assert os.path.exists(os.path.join(out_dir, "report.md"))
+            assert os.path.exists(os.path.join(out_dir, "handoff.csv"))
 
     def test_no_underperforming_skips_llm(self):
         """If no ads are underperforming, the LLM should never be called."""
@@ -184,9 +185,13 @@ class TestPipelineCallOrder:
                 "headline": "Good ad",
                 "description": "Perfect ad. Buy now!",
                 "impressions": 9999,
+                "clicks": 1500,
+                "cost": 120.0,
+                "conversions": 40,
+                "revenue": 900.0,
                 "ctr": 0.10,    # above max_ctr → not underperforming
-                "cpa": 5.0,     # below max_cpa
-                "roas": 8.0,    # above min_roas
+                "cpa": 3.0,     # below max_cpa
+                "roas": 7.5,    # above min_roas
             }])
             df.to_csv(csv_path, index=False)
             summary = run_pipeline(csv_path, out_dir, cfg, provider, mode="dry")
@@ -238,6 +243,14 @@ class TestDetectPromptType:
         )
         assert _detect_prompt_type(prompt) == "selector"
 
+    def test_detects_brand_voice(self):
+        prompt = (
+            "You are a brand voice strategist for performance ad copy.\n"
+            "Create a concise brand voice guideline for this account.\n"
+            "Return ONLY valid JSON."
+        )
+        assert _detect_prompt_type(prompt) == "brand_voice"
+
     def test_detects_headline(self):
         prompt = (
             "TASK: Generate exactly 10 headline variations for the ad below.\n"
@@ -277,3 +290,88 @@ class TestDetectPromptType:
             'Return ONLY valid JSON: {"descriptions": ["replacement 1"]}'
         )
         assert _detect_prompt_type(prompt) == "description"
+
+
+class CheckerRetryProvider:
+    """Provider that forces one checker violation, then accepts replacements."""
+
+    def __init__(self):
+        self.call_log: List[str] = []
+        self._mock = MockProvider(seed=123)
+        self._checker_calls = 0
+
+    def generate(self, prompt: str, system: str = "", max_tokens: int = 2048) -> str:
+        ptype = _detect_prompt_type(prompt)
+        self.call_log.append(ptype)
+
+        if ptype == "checker":
+            self._checker_calls += 1
+            if self._checker_calls == 1:
+                return json.dumps({
+                    "violations": [
+                        {
+                            "type": "HEADLINE",
+                            "index": 0,
+                            "text": "bad headline",
+                            "issue": "ALL-CAPS word",
+                        }
+                    ]
+                })
+            return json.dumps({"violations": []})
+
+        if ptype == "headline" and "failed validation" in prompt.lower():
+            return json.dumps({"headlines": ["Mua ngay uu dai doc quyen"]})
+
+        return self._mock.generate(prompt, system, max_tokens)
+
+    def stats(self) -> dict:
+        return {
+            "call_count": len(self.call_log),
+            "call_log": list(self.call_log),
+            "retry_count": 0,
+            "total_tokens": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "last_error": None,
+        }
+
+
+class TestPipelineCheckerRetry:
+    def test_checker_failure_retries_only_failing_agent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from gcf.pipeline import run_pipeline
+            cfg = _make_config(tmp)
+            cfg.generation.max_retries_validation = 2
+            provider = CheckerRetryProvider()
+            csv_path = os.path.join(tmp, "ads.csv")
+            out_dir = os.path.join(tmp, "output")
+            _write_sample_csv(csv_path)
+
+            summary = run_pipeline(csv_path, out_dir, cfg, provider, mode="dry")
+
+        assert summary["selected"] == 1
+        # Initial order + targeted headline retry + final checker
+        assert provider.call_log[:4] == ["selector", "headline", "description", "checker"]
+        assert provider.call_log.count("selector") == 1
+        assert provider.call_log.count("description") == 1
+        assert provider.call_log.count("headline") >= 2
+        assert provider.call_log.count("checker") >= 2
+
+
+class TestPipelineLiveModeSubagents:
+    def test_live_mode_calls_brand_voice_agent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from gcf.pipeline import run_pipeline
+            cfg = _make_config(tmp)
+            provider = LoggingProvider()
+            csv_path = os.path.join(tmp, "ads.csv")
+            out_dir = os.path.join(tmp, "output")
+            _write_sample_csv(csv_path)
+
+            summary = run_pipeline(csv_path, out_dir, cfg, provider, mode="live")
+
+        assert summary["selected"] == 1
+        assert provider.call_log[0] == "selector"
+        assert "brand_voice" in provider.call_log
+        assert "checker" in provider.call_log
+

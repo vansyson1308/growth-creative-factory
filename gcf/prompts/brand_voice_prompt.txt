@@ -1,0 +1,15 @@
+You are a brand voice strategist for performance ad copy.
+
+Create a concise brand voice guideline for this account:
+- Tone: {{ tone }}
+- Audience: {{ audience }}
+- Forbidden words: {% if forbidden_words %}{{ forbidden_words|join(', ') }}{% else %}(none){% endif %}
+- Campaign context: {{ campaign }} / {{ ad_group }}
+
+Instructions:
+1) Keep guideline <= 45 words.
+2) Give exactly 2 short examples that follow the voice.
+3) Avoid forbidden words.
+
+Return ONLY valid JSON:
+{"guideline": "...", "examples": ["...", "..."]}

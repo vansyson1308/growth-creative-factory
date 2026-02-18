@@ -33,6 +33,10 @@ class GenerationConfig:
 @dataclass
 class DedupeConfig:
     similarity_threshold: int = 85
+    min_distinct_angles: int = 3
+    angle_buckets: List[str] = field(default_factory=lambda: [
+        "benefit", "urgency", "social_proof", "problem_solution", "curiosity"
+    ])
 
 
 @dataclass
@@ -40,6 +44,17 @@ class PolicyConfig:
     blocked_patterns: List[str] = field(default_factory=lambda: [
         r"(?i)cam kết", r"(?i)tuyệt đối", r"(?i)\bno\.?\s*1\b",
         r"(?i)\bbest\b", r"(?i)\bguarantee[d]?\b", r"(?i)\b#1\b", r"(?i)100%",
+    ])
+
+
+
+
+@dataclass
+class BrandVoiceConfig:
+    tone: str = "clear, credible, and action-oriented"
+    audience: str = "prospects comparing options"
+    forbidden_words: List[str] = field(default_factory=lambda: [
+        "guarantee", "best", "no.1", "#1", "100%",
     ])
 
 
@@ -85,6 +100,7 @@ class AppConfig:
     dedupe: DedupeConfig = field(default_factory=DedupeConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     provider: ProviderConfig = field(default_factory=ProviderConfig)
+    brand_voice: BrandVoiceConfig = field(default_factory=BrandVoiceConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     retry_api: RetryConfig = field(default_factory=RetryConfig)
@@ -105,6 +121,7 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         dedupe=DedupeConfig(**raw.get("dedupe", {})),
         policy=PolicyConfig(**raw.get("policy", {})),
         provider=ProviderConfig(**raw.get("provider", {})),
+        brand_voice=BrandVoiceConfig(**raw.get("brand_voice", {})),
         memory=MemoryConfig(**raw.get("memory", {})),
         budget=BudgetConfig(**raw.get("budget", {})),
         retry_api=RetryConfig(**raw.get("retry_api", {})),

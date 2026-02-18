@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 from jinja2 import Template
 
@@ -40,12 +40,11 @@ def _load_template() -> Template:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _parse_json_violations(raw: str) -> List[Dict]:
-    """Extract the violations list from a checker JSON response.
+    """Extract ``violations`` from a strict JSON checker response.
 
-    Handles three common LLM formats:
-    1. Plain JSON object: ``{"violations": [...]}``
-    2. JSON inside a markdown code-block: ``\`\`\`json\\n{...}\\n\`\`\```
-    3. JSON embedded inside prose — extracted with regex
+    Accepted format is a JSON object with a ``violations`` array.
+    Markdown fences are tolerated and stripped, but prose fallbacks are
+    intentionally not supported to keep parsing deterministic.
     """
     text = raw.strip()
 
@@ -60,15 +59,6 @@ def _parse_json_violations(raw: str) -> List[Dict]:
         return data.get("violations", [])
     except (json.JSONDecodeError, AttributeError):
         pass
-
-    # Fallback: extract first {...} block
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group())
-            return data.get("violations", [])
-        except (json.JSONDecodeError, AttributeError):
-            pass
 
     return []
 
