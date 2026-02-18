@@ -25,6 +25,13 @@ generation:
 # Deduplication
 dedupe:
   similarity_threshold: 85     # rapidfuzz ratio; ≥ this → duplicate
+  min_distinct_angles: 3       # enforce at least N distinct angle buckets
+  angle_buckets:
+    - benefit
+    - urgency
+    - social_proof
+    - problem_solution
+    - curiosity
 
 # Policy filter — regex patterns to reject
 policy:
@@ -36,6 +43,18 @@ policy:
     - "(?i)\\bguarantee[d]?\\b"
     - "(?i)\\b#1\\b"
     - "(?i)100%"
+
+
+# Brand voice rules (live mode brand_voice_agent)
+brand_voice:
+  tone: clear, credible, and action-oriented
+  audience: prospects comparing options
+  forbidden_words:
+    - guarantee
+    - best
+    - no.1
+    - "#1"
+    - 100%
 
 # LLM provider
 provider:

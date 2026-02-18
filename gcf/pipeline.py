@@ -13,12 +13,15 @@ from gcf.io_csv import (
     read_ads_csv,
     write_figma_tsv,
     write_new_ads_csv,
+    write_handoff_csv,
     write_report,
 )
 from gcf.selector import select_underperforming, generate_strategy
-from gcf.generator_headline import generate_headlines
-from gcf.generator_description import generate_descriptions
+from gcf.generator_headline import generate_headlines, generate_headline_replacements
+from gcf.generator_description import generate_descriptions, generate_description_replacements
 from gcf.checker import check_copy
+from gcf.brand_voice_agent import generate_brand_voice_guideline
+from gcf.compliance_agent import filter_risky_claims
 from gcf.memory import append_entry, load_memory
 from gcf.providers.base import BaseProvider
 
@@ -64,6 +67,7 @@ def run_pipeline(
     3. generate_headlines      — LLM: headline variants (cache-aware, targeted retry)
     4. generate_descriptions   — LLM: description variants (cache-aware, targeted retry)
     5. check_copy              — LLM: compliance review, removes violating items
+    6. (live) brand/compliance  — brand_voice_agent + compliance_agent filters
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -85,6 +89,7 @@ def run_pipeline(
             "pass_count": 0,
             "fail_count": 0,
             "checker_violations": 0,
+            "compliance_failures": 0,
             "message": "No underperforming ads found with current thresholds.",
             "provider_stats": {},
             "cache_stats": {},
@@ -98,6 +103,7 @@ def run_pipeline(
     total_pass = 0
     total_fail = 0
     total_violations = 0
+    total_compliance_failures = 0
     report_details: List[Dict] = []
 
     for idx, (_, row) in enumerate(selected.iterrows()):
@@ -115,21 +121,100 @@ def run_pipeline(
 
         memory_ctx = _build_memory_context(cfg, ad.get("campaign", ""))
 
+        brand_voice_guideline = ""
+        if mode == "live":
+            brand_voice_guideline = generate_brand_voice_guideline(
+                provider, cfg, ad.get("campaign", ""), ad.get("ad_group", "")
+            )
+
         # ── Step 3: generate_headlines (LLM — headline_prompt.txt) ───────────
         headlines, h_fail = generate_headlines(
-            provider, ad, strategy, cfg, memory_ctx, cache_store
+            provider, ad, strategy, cfg, memory_ctx, brand_voice_guideline, cache_store
         )
 
         # ── Step 4: generate_descriptions (LLM — description_prompt.txt) ─────
         descriptions, d_fail = generate_descriptions(
-            provider, ad, strategy, cfg, memory_ctx, cache_store
+            provider, ad, strategy, cfg, memory_ctx, brand_voice_guideline, cache_store
         )
 
         # ── Step 5: check_copy (LLM — checker_prompt.txt) ─────────────────────
         headlines, descriptions, violations = check_copy(
             provider, headlines, descriptions, cfg
         )
+
+        # Retry only the failing agent(s) with concise checker feedback.
+        for _ in range(cfg.generation.max_retries_validation):
+            if not violations:
+                break
+
+            headline_failures = []
+            description_failures = []
+            for v in violations:
+                vtype = str(v.get("type", "")).upper()
+                idx = v.get("index")
+                issue = v.get("issue", "checker violation")
+                if not isinstance(idx, int):
+                    continue
+                if vtype == "HEADLINE" and 0 <= idx < len(headlines):
+                    headline_failures.append({"text": headlines[idx], "reason": issue})
+                elif vtype == "DESCRIPTION" and 0 <= idx < len(descriptions):
+                    description_failures.append({"text": descriptions[idx], "reason": issue})
+
+            if headline_failures:
+                bad_texts = {f["text"] for f in headline_failures}
+                headlines = [h for h in headlines if h not in bad_texts]
+                replacements = generate_headline_replacements(
+                    provider, ad, strategy, cfg, headline_failures, len(headline_failures)
+                )
+                headlines = headlines + [h for h in replacements if h not in headlines]
+
+            if description_failures:
+                bad_texts = {f["text"] for f in description_failures}
+                descriptions = [d for d in descriptions if d not in bad_texts]
+                replacements = generate_description_replacements(
+                    provider, ad, strategy, cfg, description_failures, len(description_failures)
+                )
+                descriptions = descriptions + [d for d in replacements if d not in descriptions]
+
+            headlines, descriptions, violations = check_copy(
+                provider, headlines, descriptions, cfg
+            )
+
         total_violations += len(violations)
+
+        compliance_failures: List[Dict] = []
+        ad_compliance_failures = 0
+        if mode == "live":
+            for _ in range(cfg.generation.max_retries_validation):
+                headlines, descriptions, compliance_failures = filter_risky_claims(
+                    headlines, descriptions
+                )
+                ad_compliance_failures += len(compliance_failures)
+                if not compliance_failures:
+                    break
+
+                headline_failures = [
+                    {"text": f["text"], "reason": f.get("reason", "risky claim")}
+                    for f in compliance_failures if f.get("type") == "HEADLINE"
+                ]
+                description_failures = [
+                    {"text": f["text"], "reason": f.get("reason", "risky claim")}
+                    for f in compliance_failures if f.get("type") == "DESCRIPTION"
+                ]
+
+                if headline_failures:
+                    replacements = generate_headline_replacements(
+                        provider, ad, strategy, cfg, headline_failures, len(headline_failures)
+                    )
+                    headlines = headlines + [h for h in replacements if h not in headlines]
+
+                if description_failures:
+                    replacements = generate_description_replacements(
+                        provider, ad, strategy, cfg, description_failures, len(description_failures)
+                    )
+                    descriptions = descriptions + [d for d in replacements if d not in descriptions]
+
+            total_compliance_failures += ad_compliance_failures
 
         h_count = len(headlines)
         d_count = len(descriptions)
@@ -182,6 +267,7 @@ def run_pipeline(
             "headlines_generated": h_count,
             "descriptions_generated": d_count,
             "checker_violations": len(violations),
+            "compliance_failures": ad_compliance_failures,
             "combos": len(combos),
             "variant_set_id": variant_set_id,
         })
@@ -189,6 +275,18 @@ def run_pipeline(
     # 4. Write outputs
     write_new_ads_csv(new_ads_rows, output_dir / "new_ads.csv")
     write_figma_tsv(figma_rows, output_dir / "figma_variations.tsv")
+    handoff_rows = [
+        {
+            "variant_set_id": r.get("variant_set_id", ""),
+            "TAG": r.get("tag", ""),
+            "H1": r.get("variant_headline", ""),
+            "DESC": r.get("variant_description", ""),
+            "status": "",
+            "notes": "",
+        }
+        for r in new_ads_rows
+    ]
+    write_handoff_csv(handoff_rows, output_dir / "handoff.csv")
 
     # 5. Collect runtime stats
     provider_stats = provider.stats() if hasattr(provider, "stats") else {}
@@ -201,6 +299,7 @@ def run_pipeline(
         "pass_count": total_pass,
         "fail_count": total_fail,
         "checker_violations": total_violations,
+        "compliance_failures": total_compliance_failures,
         "message": "Pipeline completed successfully.",
         "provider_stats": provider_stats,
         "cache_stats": cache_stats,
@@ -225,6 +324,7 @@ def _format_report(summary: Dict, details: List[Dict]) -> str:
         f"- Copy pieces passed validation: {summary['pass_count']}",
         f"- Copy pieces failed validation: {summary['fail_count']}",
         f"- Checker violations removed: {summary.get('checker_violations', 0)}",
+        f"- Compliance risky claims filtered: {summary.get('compliance_failures', 0)}",
         "",
     ]
 
@@ -268,6 +368,7 @@ def _format_report(summary: Dict, details: List[Dict]) -> str:
         lines.append(f"- **Headlines generated:** {d['headlines_generated']}")
         lines.append(f"- **Descriptions generated:** {d['descriptions_generated']}")
         lines.append(f"- **Checker violations removed:** {d['checker_violations']}")
+        lines.append(f"- **Compliance failures filtered:** {d.get('compliance_failures', 0)}")
         lines.append(f"- **Combinations:** {d['combos']}")
         lines.append(f"- **Variant set ID:** `{d['variant_set_id']}`")
         lines.append("")

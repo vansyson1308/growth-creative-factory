@@ -84,16 +84,6 @@ def _parse_strategy_json(raw: str, ad_id: str) -> Dict:
     except (json.JSONDecodeError, AttributeError):
         pass
 
-    # Fallback: extract first {...} block
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            data = json.loads(match.group())
-            if "strategy" in data:
-                return data
-        except (json.JSONDecodeError, AttributeError):
-            pass
-
     # Safe fallback so pipeline never crashes on bad LLM output
     return {
         "ad_id": ad_id,

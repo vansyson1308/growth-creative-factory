@@ -59,6 +59,7 @@ Expected terminal output:
 | `output/new_ads.csv` | All H1 × DESC variant combinations — bulk-upload ready |
 | `output/figma_variations.tsv` | **UTF-8 no BOM** · columns `H1 TAB DESC TAB TAG` — paste straight into Figma plugin |
 | `output/report.md` | Run summary: stats, strategies, variant-set IDs |
+| `output/handoff.csv` | Team handoff review sheet with blank `status` and `notes` |
 
 Quick sanity checks:
 
@@ -124,7 +125,7 @@ python -m gcf ingest-results --input results/performance.csv
 streamlit run app.py
 ```
 
-Upload CSV → set thresholds → click Generate → download outputs.
+Upload CSV → set thresholds → click Generate → download outputs (including **Download handoff sheet** for team review).
 
 ## Output Files
 
@@ -133,6 +134,7 @@ Upload CSV → set thresholds → click Generate → download outputs.
 | `output/new_ads.csv` | Bulk-friendly CSV with all variant combinations |
 | `output/figma_variations.tsv` | TSV for pasting into Figma plugin |
 | `output/report.md` | Run summary with stats and strategy notes |
+| `output/handoff.csv` | Marketing review sheet (`variant_set_id, TAG, H1, DESC, status, notes`) |
 
 ## Config
 
@@ -157,17 +159,22 @@ Open the Streamlit app (`scripts\run_app.bat` or `streamlit run app.py`). Upload
 ### Step 3: Import Plugin into Figma
 In Figma Desktop: Menu → Plugins → Development → Import plugin from manifest. Select `figma_plugin/manifest.json`. The plugin appears under Plugins → Growth Creative Factory.
 
-### Step 4: Create Variations in Figma
+### Step 4: Marketing Handoff Review
+1. Open `output/handoff.csv` in Sheets/Excel.
+2. Review each line, fill `status` (approve/revise/reject) and `notes`.
+3. Finalize approved copy for design handoff.
+
+### Step 5: Create Variations in Figma
 1. Create a frame named `AD_TEMPLATE` with text layers named `H1` and `DESC` (optional: `CTA`, `H2`).
 2. Open the plugin (Plugins → Growth Creative Factory).
 3. Open `figma_variations.tsv` in any text editor, Select All, Copy.
 4. Paste into the TSV text area in the plugin.
 5. Click **Generate Variations** → up to 100 frames appear in a grid.
 
-### Step 5: Export PNGs (Optional)
+### Step 6: Export PNGs (Optional)
 Click **Export PNGs** in the plugin to download all generated frames as 2x PNG files.
 
-### Step 6: Close the Loop — Ingest Results
+### Step 7: Close the Loop — Ingest Results
 After running ads with the new variations, export performance data as `performance.csv` (columns: `variant_set_id, campaign, ctr, cpa, roas, notes`). Then run:
 ```bash
 python -m gcf ingest-results --input results/performance.csv
@@ -223,3 +230,46 @@ growth-creative-factory/
 ## License
 
 Internal use. Modify as needed for your team.
+
+
+## Optional: Google Sheets handoff
+
+You can push `output/figma_variations.tsv` and `output/new_ads.csv` to Google Sheets (optional).
+
+- Setup guide: `docs/CONNECT_GOOGLE_SHEETS.md`
+- CLI push examples:
+
+```bash
+python -m gcf sheets push --spreadsheet_id <id> --worksheet Variations --input output/figma_variations.tsv
+python -m gcf sheets push --spreadsheet_id <id> --worksheet Ads --input output/new_ads.csv
+```
+
+If credentials are not configured, the app/CLI show instructions and local download workflow still works.
+
+
+## Google Ads connector (optional)
+
+Pull Google Ads performance directly into unified `AdsRow` CSV (BYO credentials).
+
+- Setup guide: `docs/CONNECT_GOOGLE_ADS.md`
+- Pull command:
+
+```bash
+python -m gcf google-ads pull --customer_id <id> --date_range LAST_30_DAYS --out input/ads.csv
+```
+
+Manual CSV upload flow remains fully supported if you do not configure this connector.
+
+
+## Meta Ads connector (optional)
+
+Pull Meta Ads insights into unified `AdsRow` CSV with BYO token/account ID.
+
+- Setup guide: `docs/CONNECT_META_ADS.md`
+- Pull command:
+
+```bash
+python -m gcf meta-ads pull --date_preset last_30d --out input/ads.csv
+```
+
+This connector is pull-only and does not create/edit ads.

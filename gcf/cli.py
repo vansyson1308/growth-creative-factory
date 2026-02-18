@@ -8,6 +8,9 @@ from gcf.config import load_config
 from gcf.pipeline import run_pipeline
 from gcf.io_csv import read_performance_csv, InputSchemaError
 from gcf.memory import ingest_performance
+from gcf.connectors.google_sheets import push_tabular_file, GoogleSheetsConfigError
+from gcf.connectors.google_ads import pull_google_ads_rows, GoogleAdsConnectorError
+from gcf.connectors.meta_ads import pull_meta_ads_rows, MetaAdsConnectorError
 
 
 def _get_provider(cfg, mode: str):
@@ -106,6 +109,79 @@ def ingest_results(input_path: str, config_path: str):
     click.echo(f"   Existing entries updated : {updated}")
     click.echo(f"   New entries appended      : {appended}")
     click.echo(f"   Total rows processed      : {updated + appended}")
+
+
+@cli.group("sheets")
+def sheets_group():
+    """Google Sheets helper commands."""
+    pass
+
+
+@sheets_group.command("push")
+@click.option("--spreadsheet_id", required=True, help="Target Google Sheet ID")
+@click.option("--worksheet", required=True, help="Worksheet/tab name")
+@click.option("--input", "input_path", required=True, help="Input CSV or TSV path")
+def sheets_push(spreadsheet_id: str, worksheet: str, input_path: str):
+    """Push local CSV/TSV output to Google Sheets (optional connector)."""
+    try:
+        n = push_tabular_file(spreadsheet_id, worksheet, input_path)
+    except GoogleSheetsConfigError as exc:
+        raise click.ClickException(str(exc))
+    except Exception as exc:
+        raise click.ClickException(f"Failed to push to Google Sheets: {exc}")
+
+    click.echo(f"✅ Pushed {n} rows to worksheet '{worksheet}' in spreadsheet {spreadsheet_id}.")
+
+
+@cli.group("google-ads")
+def google_ads_group():
+    """Google Ads connector commands."""
+    pass
+
+
+@google_ads_group.command("pull")
+@click.option("--customer_id", required=True, help="Google Ads customer ID")
+@click.option("--date_range", default="LAST_30_DAYS", show_default=True, help="Google Ads date range")
+@click.option("--level", default="ad", show_default=True, type=click.Choice(["ad"]))
+@click.option("--out", "out_path", default="input/ads.csv", show_default=True, help="Output CSV path")
+@click.option("--config", "config_path", default=None, help="Optional google-ads.yaml path")
+def google_ads_pull(customer_id: str, date_range: str, level: str, out_path: str, config_path: str | None):
+    """Pull Google Ads performance into unified AdsRow CSV."""
+    try:
+        rows = pull_google_ads_rows(
+            customer_id=customer_id,
+            date_range=date_range,
+            level=level,
+            out_path=out_path,
+            config_path=config_path,
+        )
+    except GoogleAdsConnectorError as exc:
+        raise click.ClickException(str(exc))
+    except Exception as exc:
+        raise click.ClickException(f"Google Ads pull failed: {exc}")
+
+    click.echo(f"✅ Pulled {len(rows)} rows from Google Ads into {out_path}")
+
+
+@cli.group("meta-ads")
+def meta_ads_group():
+    """Meta Ads connector commands."""
+    pass
+
+
+@meta_ads_group.command("pull")
+@click.option("--date_preset", default="last_30d", show_default=True, help="Meta date preset")
+@click.option("--out", "out_path", default="input/ads.csv", show_default=True, help="Output CSV path")
+def meta_ads_pull(date_preset: str, out_path: str):
+    """Pull Meta Ads insights into unified AdsRow CSV."""
+    try:
+        rows = pull_meta_ads_rows(date_preset=date_preset, out_path=out_path)
+    except MetaAdsConnectorError as exc:
+        raise click.ClickException(str(exc))
+    except Exception as exc:
+        raise click.ClickException(f"Meta Ads pull failed: {exc}")
+
+    click.echo(f"✅ Pulled {len(rows)} rows from Meta Ads into {out_path}")
 
 
 if __name__ == "__main__":

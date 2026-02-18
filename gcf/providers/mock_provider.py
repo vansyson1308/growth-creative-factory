@@ -42,7 +42,7 @@ _DESC_POOL = [
 def _detect_prompt_type(prompt: str) -> str:
     """Detect which agent type this prompt is intended for.
 
-    Returns one of: 'selector', 'headline', 'description', 'checker', 'unknown'.
+    Returns one of: 'selector', 'brand_voice', 'headline', 'description', 'checker', 'unknown'.
     Uses the first 5 lines (TASK / role declaration) to avoid false positives
     from context fields like 'original_headline' or 'current description'.
     """
@@ -58,6 +58,10 @@ def _detect_prompt_type(prompt: str) -> str:
         "analyse" in first_lines and "underperforming" in first_lines
     ):
         return "selector"
+
+    # Brand-voice guidance prompt
+    if "brand voice strategist" in full_lower or "create a concise brand voice guideline" in full_lower:
+        return "brand_voice"
 
     # Description vs. headline — check TASK line first
     if "generate" in first_lines and "description" in first_lines:
@@ -105,6 +109,8 @@ class MockProvider(BaseProvider):
 
         if ptype == "selector":
             return self._mock_strategy(prompt)
+        elif ptype == "brand_voice":
+            return self._mock_brand_voice()
         elif ptype == "headline":
             return self._mock_headlines()
         elif ptype == "description":
@@ -134,6 +140,16 @@ class MockProvider(BaseProvider):
                 "that does not differentiate from competitor ads."
             ),
             "strategy": "Test urgency + price-anchor angle to drive immediate clicks",
+        })
+
+
+    def _mock_brand_voice(self) -> str:
+        return json.dumps({
+            "guideline": "Use a clear, helpful, action-focused tone for value-aware buyers.",
+            "examples": [
+                "Save time with practical features. Try it today.",
+                "Straightforward value for busy teams. Get started now.",
+            ],
         })
 
     def _mock_headlines(self, n: int = 10) -> str:

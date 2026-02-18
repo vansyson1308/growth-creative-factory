@@ -14,6 +14,10 @@ STRATEGY ANGLE: {{ strategy }}
 LEARNINGS FROM PREVIOUS TESTS (avoid repeating these angles):
 {{ memory_context }}
 {% endif %}
+{% if brand_voice_guideline %}
+BRAND VOICE GUIDELINE (must follow):
+{{ brand_voice_guideline }}
+{% endif %}
 
 STRICT RULES:
 1. Each description MUST be <= {{ max_chars }} characters including spaces. Count carefully!
@@ -21,6 +25,7 @@ STRICT RULES:
 3. NO absolute claims - forbidden: "cam ket", "tuyet doi", "No.1", "best", "guarantee", "100%", "#1".
 4. Write in the same language as the original description.
 5. Each description should pair naturally with a different headline angle.
+6. Ensure at least {{ min_distinct_angles }} distinct creative angles across outputs, chosen from: {{ angle_buckets|join(", ") }}.
 
 Return ONLY valid JSON - no markdown fences, no explanation outside the object:
 {"descriptions": ["description 1", "description 2", ...]}

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from gcf.io_csv import write_figma_tsv
+from gcf.io_csv import write_figma_tsv, write_handoff_csv, read_ads_csv, InputSchemaError
 
 
 # ---------------------------------------------------------------------------
@@ -88,3 +88,47 @@ class TestFigmaTsvSchema:
         out = tmp_path / "nested" / "dir" / "figma.tsv"
         write_figma_tsv([{"H1": "H", "DESC": "D", "TAG": "V001"}], out)
         assert out.exists()
+
+
+class TestHandoffCsv:
+    def test_handoff_schema_and_blank_columns(self, tmp_path):
+        rows = [
+            {
+                "variant_set_id": "vs_001",
+                "TAG": "V001",
+                "H1": "Save now",
+                "DESC": "Shop today",
+            }
+        ]
+        out = tmp_path / "handoff.csv"
+        write_handoff_csv(rows, out)
+
+        lines = out.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "variant_set_id,TAG,H1,DESC,status,notes"
+        assert lines[1].endswith(",,")
+
+
+class TestInputValidation:
+    def test_missing_required_columns_has_suggestions(self, tmp_path):
+        bad = tmp_path / "bad.csv"
+        bad.write_text("campaign,ad_id\nC1,A1\n", encoding="utf-8")
+        try:
+            read_ads_csv(bad)
+            assert False, "Expected InputSchemaError"
+        except InputSchemaError as e:
+            msg = str(e)
+            assert "missing required" in msg.lower()
+            assert "ad_group" in msg
+            assert "headline" in msg
+
+    def test_numeric_normalization_and_nan(self, tmp_path):
+        p = tmp_path / "ok.csv"
+        p.write_text(
+            "campaign,ad_group,ad_id,headline,description,impressions,clicks,cost,conversions,revenue\n"
+            "C1,G1,A1,H,D,1000,10,50,0,0\n"
+            "C1,G1,A2,H,D,,nan,,2,200\n",
+            encoding="utf-8",
+        )
+        df = read_ads_csv(p)
+        assert int(df.loc[1, "impressions"]) == 0
+        assert float(df.loc[1, "spend"]) == 0.0

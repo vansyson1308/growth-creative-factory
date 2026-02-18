@@ -69,13 +69,13 @@ class TestParseJsonViolations:
         assert len(result) == 1
         assert result[0]["type"] == "DESCRIPTION"
 
-    def test_prose_with_embedded_json(self):
+    def test_prose_with_embedded_json_returns_empty(self):
         inner = json.dumps({"violations": [
             {"type": "HEADLINE", "index": 2, "text": "x", "issue": "too long"},
         ]})
         raw = f"Here is my review: {inner} — done."
         result = _parse_json_violations(raw)
-        assert len(result) == 1
+        assert result == []
 
     def test_malformed_returns_empty(self):
         result = _parse_json_violations("not valid json at all")

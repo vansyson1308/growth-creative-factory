@@ -23,6 +23,9 @@ from gcf.generator_headline import generate_headlines
 from gcf.generator_description import generate_descriptions
 from gcf.pipeline import _format_report
 from gcf.providers.mock_provider import MockProvider
+from gcf.connectors.google_sheets import push_tabular_file, GoogleSheetsConfigError
+from gcf.connectors.google_ads import pull_google_ads_rows, GoogleAdsConnectorError
+from gcf.connectors.meta_ads import pull_meta_ads_rows, MetaAdsConnectorError
 from gcf.memory import (
     append_entry,
     load_memory,
@@ -105,6 +108,27 @@ def _resolve_provider(cfg: AppConfig, mode: str):
 
 def _build_new_ads_csv_bytes(rows: List[Dict]) -> bytes:
     return pd.DataFrame(rows).to_csv(index=False, encoding="utf-8").encode("utf-8")
+
+
+def _build_handoff_csv_bytes(new_ads_rows: List[Dict]) -> bytes:
+    rows = [
+        {
+            "variant_set_id": r.get("variant_set_id", ""),
+            "TAG": r.get("tag", ""),
+            "H1": r.get("variant_headline", ""),
+            "DESC": r.get("variant_description", ""),
+            "status": "",
+            "notes": "",
+        }
+        for r in new_ads_rows
+    ]
+    df = pd.DataFrame(rows)
+    for col in ("variant_set_id", "TAG", "H1", "DESC", "status", "notes"):
+        if col not in df.columns:
+            df[col] = ""
+    return df[["variant_set_id", "TAG", "H1", "DESC", "status", "notes"]].to_csv(
+        index=False, encoding="utf-8"
+    ).encode("utf-8")
 
 
 def _build_figma_tsv_bytes(rows: List[Dict]) -> bytes:
@@ -596,6 +620,7 @@ def step4() -> None:
     # ── Build in-memory bytes (generated once per render) ────────────────────
     new_ads_bytes    = _build_new_ads_csv_bytes(new_ads_rows)
     figma_tsv_bytes  = _build_figma_tsv_bytes(figma_rows)
+    handoff_bytes    = _build_handoff_csv_bytes(new_ads_rows)
     report_bytes     = report_text.encode("utf-8")
 
     # ── Summary bar ──────────────────────────────────────────────────────────
@@ -608,7 +633,7 @@ def step4() -> None:
     st.divider()
 
     # ── Download cards ───────────────────────────────────────────────────────
-    col_csv, col_tsv, col_md = st.columns(3)
+    col_csv, col_tsv, col_handoff, col_md = st.columns(4)
 
     with col_csv:
         st.markdown("##### 📊 new_ads.csv")
@@ -635,6 +660,21 @@ def step4() -> None:
             data=figma_tsv_bytes,
             file_name="figma_variations.tsv",
             mime="text/tab-separated-values",
+            use_container_width=True,
+            type="primary",
+        )
+
+
+    with col_handoff:
+        st.markdown("##### 🤝 handoff.csv")
+        st.caption(
+            "Marketing review sheet with blank `status` / `notes` columns for team collaboration."
+        )
+        st.download_button(
+            "⬇️ Download handoff sheet",
+            data=handoff_bytes,
+            file_name="handoff.csv",
+            mime="text/csv",
             use_container_width=True,
             type="primary",
         )
@@ -672,13 +712,15 @@ def step4() -> None:
 
 3. **Open the plugin** — Plugins → Growth Creative Factory.
 
-4. **Paste TSV** — Open `figma_variations.tsv` in any text editor → Select All → Copy
+4. **Review handoff sheet** — Open `handoff.csv`, collaborate in `status`/`notes`, finalize approved lines.
+
+5. **Paste TSV** — Open `figma_variations.tsv` in any text editor → Select All → Copy
    → paste into the TSV text area in the plugin.
 
-5. **Generate** — Click **Generate Variations** → frames appear in a grid,
+6. **Generate** — Click **Generate Variations** → frames appear in a grid,
    each with H1 and DESC filled in.
 
-6. **Export PNGs** — Click **Export PNGs** in the plugin to download all frames at 2×.
+7. **Export PNGs** — Click **Export PNGs** in the plugin to download all frames at 2×.
             """
         )
 
@@ -883,6 +925,140 @@ The fail count shown in Step 3 includes both char-limit failures and policy viol
                 pass
 
 
+
+
+def handoff_tab() -> None:
+    st.header("🤝 Handoff (Optional Google Sheets)")
+    st.caption("Push generated TSV/CSV outputs to Google Sheets, or continue with local files only.")
+
+    spreadsheet_id = st.text_input("Spreadsheet ID", key="handoff_spreadsheet_id")
+    ws_tsv = st.text_input("Worksheet for TSV", value="Variations", key="handoff_ws_tsv")
+    ws_csv = st.text_input("Worksheet for CSV", value="Ads", key="handoff_ws_csv")
+
+    tsv_path = Path("output/figma_variations.tsv")
+    csv_path = Path("output/new_ads.csv")
+
+    creds_present = bool(
+        os.environ.get("GCF_GOOGLE_CREDS_JSON") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    )
+    if not creds_present:
+        st.info(
+            "Google credentials not configured. Set `GCF_GOOGLE_CREDS_JSON` (or "
+            "`GOOGLE_APPLICATION_CREDENTIALS`) and see `docs/CONNECT_GOOGLE_SHEETS.md`."
+        )
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Push TSV to Google Sheets", use_container_width=True):
+            if not spreadsheet_id.strip():
+                st.error("Please enter Spreadsheet ID")
+            elif not tsv_path.exists():
+                st.error("TSV file not found: output/figma_variations.tsv")
+            else:
+                try:
+                    n = push_tabular_file(spreadsheet_id.strip(), ws_tsv.strip() or "Variations", str(tsv_path))
+                    st.success(f"Pushed {n} rows to {ws_tsv}.")
+                except GoogleSheetsConfigError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Push failed: {exc}")
+
+    with c2:
+        if st.button("Push CSV to Google Sheets", use_container_width=True):
+            if not spreadsheet_id.strip():
+                st.error("Please enter Spreadsheet ID")
+            elif not csv_path.exists():
+                st.error("CSV file not found: output/new_ads.csv")
+            else:
+                try:
+                    n = push_tabular_file(spreadsheet_id.strip(), ws_csv.strip() or "Ads", str(csv_path))
+                    st.success(f"Pushed {n} rows to {ws_csv}.")
+                except GoogleSheetsConfigError as exc:
+                    st.error(str(exc))
+                except Exception as exc:
+                    st.error(f"Push failed: {exc}")
+
+    st.divider()
+    st.markdown("### Local fallback")
+    st.caption("No Google Sheets? Continue downloading files from Step 4 in the Wizard.")
+
+
+
+def connectors_tab() -> None:
+    st.header("🔌 Connectors")
+
+    tab_ga, tab_meta = st.tabs(["Google Ads", "Meta Ads"])
+
+    with tab_ga:
+        st.subheader("Google Ads (optional)")
+        st.caption("Pull performance data into `input/ads.csv` using your own Google Ads credentials.")
+
+        customer_id = st.text_input("Customer ID", key="ga_customer_id", placeholder="1234567890")
+        date_range = st.selectbox(
+            "Date range",
+            ["LAST_7_DAYS", "LAST_14_DAYS", "LAST_30_DAYS", "THIS_MONTH", "LAST_MONTH"],
+            index=2,
+            key="ga_date_range",
+        )
+
+        if st.button("Pull from Google Ads", use_container_width=True):
+            if not customer_id.strip():
+                st.error("Customer ID is required.")
+            else:
+                try:
+                    out = Path("input/ads.csv")
+                    rows = pull_google_ads_rows(
+                        customer_id=customer_id.strip(),
+                        date_range=date_range,
+                        level="ad",
+                        out_path=str(out),
+                    )
+                    st.success(f"Pulled {len(rows)} rows into {out}.")
+                    if out.exists():
+                        preview = pd.read_csv(out).head(20)
+                        st.dataframe(preview, use_container_width=True)
+                except GoogleAdsConnectorError as exc:
+                    st.error(str(exc))
+                    st.info("See docs/CONNECT_GOOGLE_ADS.md for setup instructions.")
+                except Exception as exc:
+                    st.error(f"Google Ads pull failed: {exc}")
+
+        st.info(
+            "Missing config? Create `google-ads.yaml` or set env vars. "
+            "See docs/CONNECT_GOOGLE_ADS.md"
+        )
+
+    with tab_meta:
+        st.subheader("Meta Ads (optional)")
+        st.caption("Pull Meta Ads insights into `input/ads.csv` using your own token/account ID.")
+
+        date_preset = st.selectbox(
+            "Date preset",
+            ["last_7d", "last_14d", "last_30d", "this_month", "last_month"],
+            index=2,
+            key="meta_date_preset",
+        )
+
+        if st.button("Pull from Meta Ads", use_container_width=True):
+            try:
+                out = Path("input/ads.csv")
+                rows = pull_meta_ads_rows(date_preset=date_preset, out_path=str(out))
+                st.success(f"Pulled {len(rows)} rows into {out}.")
+                if out.exists():
+                    preview = pd.read_csv(out).head(20)
+                    st.dataframe(preview, use_container_width=True)
+            except MetaAdsConnectorError as exc:
+                st.error(str(exc))
+                st.info("See docs/CONNECT_META_ADS.md for setup instructions.")
+            except Exception as exc:
+                st.error(f"Meta Ads pull failed: {exc}")
+
+        if not os.environ.get("META_ACCESS_TOKEN"):
+            st.info(
+                "Missing META_ACCESS_TOKEN / META_AD_ACCOUNT_ID. "
+                "See docs/CONNECT_META_ADS.md"
+            )
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
@@ -902,7 +1078,7 @@ def main() -> None:
     st.title("🚀 Growth Creative Factory")
     st.caption("AI-powered ad variation pipeline · 4-step wizard for marketing teams")
 
-    tab_wizard, tab_board = st.tabs(["🧙 Wizard", "📊 Learning Board"])
+    tab_wizard, tab_board, tab_handoff, tab_connectors = st.tabs(["🧙 Wizard", "📊 Learning Board", "🤝 Handoff", "🔌 Connectors"])
 
     with tab_wizard:
         _render_stepper(st.session_state.wizard_step)
@@ -923,6 +1099,12 @@ def main() -> None:
 
     with tab_board:
         learning_board()
+
+    with tab_handoff:
+        handoff_tab()
+
+    with tab_connectors:
+        connectors_tab()
 
 
 if __name__ == "__main__":
