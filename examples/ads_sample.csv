@@ -1,0 +1,9 @@
+campaign,ad_group,ad_id,headline,description,impressions,clicks,cost,conversions,revenue
+Summer_Sale,Shoes_Generic,AD001,Giày đẹp giá rẻ,Mua giày online giá tốt. Giao hàng toàn quốc.,5000,50,500,5,200
+Summer_Sale,Shoes_Brand,AD002,Nike Air Max Hot,Giày Nike chính hãng giảm giá sốc. Mua ngay!,8000,240,800,20,2000
+Winter_Launch,Coat_Women,AD003,Áo khoác mùa đông,Áo khoác nữ thời trang. Giữ ấm cả mùa đông.,3000,15,600,2,100
+Winter_Launch,Coat_Men,AD004,Áo khoác nam sale,Áo khoác nam cao cấp giảm 50%. Đặt hàng ngay!,12000,60,1200,8,800
+Back_to_School,Bag_Kids,AD005,Balo cho bé yêu,Balo đi học siêu nhẹ cho bé. Mua 1 tặng 1.,2000,80,300,15,900
+Back_to_School,Bag_Teen,AD006,Balo teen hot trend,Balo thời trang cho Gen Z. Ship nhanh 24h.,500,25,100,5,300
+Tet_Campaign,Gift_Set,AD007,Quà Tết sang trọng,Set quà Tết cao cấp. Giảm 20% đơn đầu tiên.,15000,150,3000,10,1500
+Tet_Campaign,Food_Box,AD008,Hộp bánh Tết,Hộp bánh mứt Tết truyền thống. Đặt sớm giảm giá.,10000,300,2000,40,4000

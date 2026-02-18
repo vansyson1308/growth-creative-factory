@@ -1,0 +1,46 @@
+# Growth Creative Factory — Configuration
+# ────────────────────────────────────────
+
+# Underperforming ad selection thresholds
+selector:
+  min_impressions: 1000        # ignore ads with fewer impressions
+  max_ctr: 0.02                # CTR below this → underperforming (2 %)
+  max_cpa: 50.0                # CPA above this → underperforming
+  min_roas: 2.0                # ROAS below this → underperforming
+  # An ad is "underperforming" when ANY threshold is breached
+  # (after passing the min_impressions gate)
+
+# Generation settings
+generation:
+  num_headlines: 10            # headlines per ad
+  num_descriptions: 6          # descriptions per ad
+  max_headline_chars: 30       # Google Ads headline limit
+  max_description_chars: 90    # Google Ads description limit
+  retry_limit: 3               # retries when validation fails
+  max_variants_per_run: 100    # safety cap
+
+# Deduplication
+dedupe:
+  similarity_threshold: 85     # rapidfuzz ratio; ≥ this → duplicate
+
+# Policy filter — regex patterns to reject
+policy:
+  blocked_patterns:
+    - "(?i)cam kết"
+    - "(?i)tuyệt đối"
+    - "(?i)\\bno\\.?\\s*1\\b"
+    - "(?i)\\bbest\\b"
+    - "(?i)\\bguarantee[d]?\\b"
+    - "(?i)\\b#1\\b"
+    - "(?i)100%"
+
+# LLM provider
+provider:
+  name: anthropic              # anthropic | mock
+  model: claude-sonnet-4-5-20250929
+  temperature: 0.8
+  max_tokens: 2048
+
+# Memory
+memory:
+  path: memory/memory.jsonl

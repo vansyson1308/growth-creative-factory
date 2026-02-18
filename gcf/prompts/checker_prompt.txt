@@ -1,0 +1,25 @@
+You are a compliance reviewer for advertising copy.
+
+Review the following ad variations and flag any issues:
+
+HEADLINES:
+{{ headlines }}
+
+DESCRIPTIONS:
+{{ descriptions }}
+
+CHECK FOR:
+1. Character limit violations (headlines ≤ {{ max_headline_chars }}, descriptions ≤ {{ max_description_chars }})
+2. All-caps text
+3. Absolute claims: "cam kết", "tuyệt đối", "No.1", "best", "guarantee", "100%", "#1"
+4. Missing CTA in descriptions
+5. Duplicated or very similar copy
+
+For each issue found, output:
+TYPE: headline|description
+INDEX: <number>
+TEXT: "<the problematic text>"
+ISSUE: <description of issue>
+---
+
+If everything passes, output: ALL_PASS

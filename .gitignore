@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+output/*.csv
+output/*.tsv
+output/*.md
+memory/memory.jsonl
+.pytest_cache/
+dist/
+*.egg-info/
+node_modules/

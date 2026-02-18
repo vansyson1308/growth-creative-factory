@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Inter, system-ui, sans-serif; font-size: 12px; padding: 12px; color: #333; }
+    h2 { font-size: 14px; margin-bottom: 8px; }
+    label { display: block; font-weight: 600; margin: 8px 0 4px; }
+    input[type="text"], textarea {
+      width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px;
+      font-size: 12px; font-family: inherit;
+    }
+    textarea { height: 160px; resize: vertical; font-family: monospace; }
+    .btn {
+      display: inline-block; padding: 8px 16px; border: none; border-radius: 6px;
+      font-size: 12px; font-weight: 600; cursor: pointer; margin: 4px 4px 4px 0;
+    }
+    .btn-primary { background: #18A0FB; color: #fff; }
+    .btn-primary:hover { background: #0D8DE8; }
+    .btn-secondary { background: #E8E8E8; color: #333; }
+    .btn-secondary:hover { background: #D5D5D5; }
+    .btn-export { background: #7B61FF; color: #fff; }
+    .btn-export:hover { background: #6A4FE8; }
+    .info { font-size: 11px; color: #666; margin: 4px 0; }
+    .status { margin-top: 8px; padding: 8px; border-radius: 4px; background: #F0F0F0; font-size: 11px; }
+    hr { margin: 12px 0; border: none; border-top: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <h2>🚀 Growth Creative Factory</h2>
+
+  <label for="templateName">Template frame name</label>
+  <input type="text" id="templateName" value="AD_TEMPLATE" placeholder="AD_TEMPLATE" />
+  <p class="info">The frame in your Figma file that contains H1, DESC (and optional CTA, H2) text nodes.</p>
+
+  <label for="tsvInput">Paste TSV data (H1 → DESC → TAG)</label>
+  <textarea id="tsvInput" placeholder="H1&#9;DESC&#9;TAG&#10;Tiết kiệm ngay&#9;Đăng ký nhận ưu đãi độc quyền!&#9;V001"></textarea>
+  <p class="info">Paste directly from figma_variations.tsv. First row = header (skipped).</p>
+
+  <label for="maxFrames">Max frames to generate</label>
+  <input type="text" id="maxFrames" value="100" />
+
+  <div style="margin-top: 12px;">
+    <button class="btn btn-primary" id="btnGenerate">▶ Generate Variations</button>
+    <button class="btn btn-export" id="btnExport">📷 Export PNGs</button>
+  </div>
+
+  <div class="status" id="status">Ready. Select your template frame and paste TSV data above.</div>
+
+  <script>
+    document.getElementById('btnGenerate').onclick = () => {
+      const templateName = document.getElementById('templateName').value.trim();
+      const tsvRaw = document.getElementById('tsvInput').value.trim();
+      const maxFrames = parseInt(document.getElementById('maxFrames').value, 10) || 100;
+
+      if (!tsvRaw) {
+        updateStatus('❌ Please paste TSV data.');
+        return;
+      }
+
+      const rows = parseTSV(tsvRaw);
+      if (rows.length === 0) {
+        updateStatus('❌ No valid data rows found.');
+        return;
+      }
+
+      updateStatus(`⏳ Sending ${rows.length} variations to Figma...`);
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'generate',
+          templateName,
+          rows: rows.slice(0, maxFrames),
+        }
+      }, '*');
+    };
+
+    document.getElementById('btnExport').onclick = () => {
+      updateStatus('⏳ Exporting PNGs...');
+      parent.postMessage({
+        pluginMessage: { type: 'export-pngs' }
+      }, '*');
+    };
+
+    function parseTSV(raw) {
+      const lines = raw.split('\n').filter(l => l.trim());
+      if (lines.length < 2) return [];
+      // Skip header
+      const data = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split('\t');
+        if (cols.length >= 2) {
+          data.push({
+            H1: cols[0] ? cols[0].trim() : '',
+            DESC: cols[1] ? cols[1].trim() : '',
+            TAG: cols[2] ? cols[2].trim() : ('V' + String(i).padStart(3, '0')),
+          });
+        }
+      }
+      return data;
+    }
+
+    function updateStatus(msg) {
+      document.getElementById('status').textContent = msg;
+    }
+
+    // Listen for messages from plugin code
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+      if (msg.type === 'status') {
+        updateStatus(msg.text);
+      }
+      if (msg.type === 'export-done') {
+        // Trigger download for each PNG
+        if (msg.files && msg.files.length > 0) {
+          msg.files.forEach((f) => {
+            const a = document.createElement('a');
+            a.href = 'data:image/png;base64,' + f.base64;
+            a.download = f.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          });
+          updateStatus(`✅ Exported ${msg.files.length} PNGs.`);
+        } else {
+          updateStatus('⚠️ No generated frames found to export.');
+        }
+      }
+    };
+  </script>
+</body>
+</html>

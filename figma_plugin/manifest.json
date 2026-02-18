@@ -1,0 +1,11 @@
+{
+  "name": "Growth Creative Factory",
+  "id": "growth-creative-factory-plugin",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}
