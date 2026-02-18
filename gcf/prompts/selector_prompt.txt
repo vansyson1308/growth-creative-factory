@@ -1,22 +1,25 @@
 You are an expert performance marketing analyst.
 
-Given the following underperforming ad data, analyze WHY each ad is underperforming and suggest an ANGLE STRATEGY for the new variations.
+Analyse the single underperforming ad below and return a root-cause analysis plus a concrete creative angle to test in new copy variations.
 
-Underperforming ads:
-{{ ads_data }}
+Ad details:
+- AD ID: {{ ad_id }}
+- Campaign: {{ campaign }} / {{ ad_group }}
+- Current headline: {{ headline }}
+- Current description: {{ description }}
 
-Thresholds used:
-- Min impressions: {{ min_impressions }}
-- Max CTR: {{ max_ctr }}
-- Max CPA: {{ max_cpa }}
-- Min ROAS: {{ min_roas }}
+Performance metrics:
+- Impressions: {{ impressions }}
+- CTR: {{ ctr }}
+- CPA: {{ cpa }}
+- ROAS: {{ roas }}
 
-For each ad, provide:
-1. Root cause analysis (1–2 sentences)
-2. Suggested angle/hook for new variations
+Issues detected: {{ issues }}
 
-Format your response as:
-AD_ID: <id>
-ANALYSIS: <root cause>
-STRATEGY: <new angle>
----
+Instructions:
+1. Identify the SINGLE most likely root cause of underperformance (1-2 sentences).
+2. Propose ONE specific creative angle / hook to test (e.g. urgency, social proof, benefit-led, price anchor, fear-of-missing-out).
+3. Keep "strategy" concise - it will be fed directly into a copywriting prompt.
+
+Return ONLY valid JSON - no markdown fences, no explanation outside the object:
+{"ad_id": "{{ ad_id }}", "analysis": "<root cause, 1-2 sentences>", "strategy": "<angle to test, <= 20 words>"}

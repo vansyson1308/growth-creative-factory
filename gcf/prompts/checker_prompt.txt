@@ -1,25 +1,20 @@
 You are a compliance reviewer for advertising copy.
 
-Review the following ad variations and flag any issues:
+Review the headlines and descriptions below for rule violations. Report ONLY actual violations - if everything is compliant, return an empty violations array.
 
-HEADLINES:
-{{ headlines }}
+RULES TO ENFORCE:
+1. CHARACTER LIMIT - Headlines <= {{ max_headline_chars }} chars; Descriptions <= {{ max_description_chars }} chars (count spaces and punctuation).
+2. NO ALL-CAPS WORDS - A word is all-caps if every alphabetic character is uppercase (e.g. "BUY", "FREE" are violations; "Buy", "Free" are fine).
+3. NO ABSOLUTE CLAIMS - Flag any of: "cam ket", "tuyet doi", "no.1", "best", "guarantee", "guaranteed", "100%", "#1".
+4. DESCRIPTIONS MUST HAVE A CTA - Each description needs at least one call-to-action phrase.
 
-DESCRIPTIONS:
-{{ descriptions }}
+HEADLINES TO REVIEW:
+{% for h in headlines %}{{ loop.index0 }}. {{ h }}
+{% endfor %}
+DESCRIPTIONS TO REVIEW:
+{% for d in descriptions %}{{ loop.index0 }}. {{ d }}
+{% endfor %}
 
-CHECK FOR:
-1. Character limit violations (headlines ≤ {{ max_headline_chars }}, descriptions ≤ {{ max_description_chars }})
-2. All-caps text
-3. Absolute claims: "cam kết", "tuyệt đối", "No.1", "best", "guarantee", "100%", "#1"
-4. Missing CTA in descriptions
-5. Duplicated or very similar copy
-
-For each issue found, output:
-TYPE: headline|description
-INDEX: <number>
-TEXT: "<the problematic text>"
-ISSUE: <description of issue>
----
-
-If everything passes, output: ALL_PASS
+Return ONLY valid JSON - no markdown fences, no explanation outside the object.
+Use type "HEADLINE" or "DESCRIPTION", and a 0-based index matching the lists above:
+{"violations": [{"type": "HEADLINE", "index": 0, "text": "...", "issue": "..."}, ...]}

@@ -1,7 +1,7 @@
-"""Mock provider for dry-run mode — no API calls."""
+"""Mock provider for dry-run mode — no API calls, strict JSON responses."""
 from __future__ import annotations
 
-import hashlib
+import json
 import random
 from typing import List
 
@@ -13,9 +13,9 @@ _HEADLINE_POOL = [
     "Ưu đãi có hạn",
     "Mua 1 tặng 1 hot deal",
     "Dùng thử miễn phí 7 ngày",
-    "Giảm 30% toàn bộ sản phẩm",
+    "Giảm 30% toàn bộ",
     "Đăng ký nhận quà ngay",
-    "Nâng cấp cuộc sống dễ dàng",
+    "Nâng cấp cuộc sống dễ",
     "Trải nghiệm khác biệt",
     "Giải pháp tối ưu chi phí",
     "Xu hướng mới 2026",
@@ -31,52 +31,134 @@ _DESC_POOL = [
     "Trải nghiệm dịch vụ chuyên nghiệp với đội ngũ tận tâm. Liên hệ ngay!",
     "Sản phẩm chất lượng cao, giá hợp lý. Mua ngay kẻo lỡ deal hot!",
     "Giải pháp toàn diện cho doanh nghiệp vừa và nhỏ. Tư vấn miễn phí!",
-    "Hơn 10.000 khách hàng tin dùng. Bạn sẽ là người tiếp theo? Thử ngay!",
     "Giao hàng miễn phí toàn quốc. Đổi trả dễ dàng trong 30 ngày.",
     "Công nghệ tiên tiến, thiết kế hiện đại. Nâng tầm phong cách. Mua ngay!",
     "Ưu đãi đặc biệt cuối tuần — giảm thêm 15%. Đặt hàng ngay hôm nay!",
     "Tham gia cộng đồng hơn 50K thành viên. Đăng ký nhận tin ưu đãi!",
+    "Chất lượng hàng đầu, giá phải chăng. Xem ngay và mua hôm nay!",
 ]
 
 
-class MockProvider(BaseProvider):
-    """Deterministic-ish mock that returns plausible ad copy."""
+def _detect_prompt_type(prompt: str) -> str:
+    """Detect which agent type this prompt is intended for.
 
-    def __init__(self, seed: int = 42):
+    Returns one of: 'selector', 'headline', 'description', 'checker', 'unknown'.
+    Uses the first 5 lines (TASK / role declaration) to avoid false positives
+    from context fields like 'original_headline' or 'current description'.
+    """
+    first_lines = "\n".join(prompt.splitlines()[:5]).lower()
+    full_lower = prompt.lower()
+
+    # Checker: reviews existing copy for violations
+    if "compliance reviewer" in full_lower or "violations" in first_lines:
+        return "checker"
+
+    # Selector: analyses underperforming ads
+    if "performance marketing analyst" in full_lower or "root-cause" in full_lower or (
+        "analyse" in first_lines and "underperforming" in first_lines
+    ):
+        return "selector"
+
+    # Description vs. headline — check TASK line first
+    if "generate" in first_lines and "description" in first_lines:
+        return "description"
+    if "generate" in first_lines and "headline" in first_lines:
+        return "headline"
+
+    # Targeted retry prompts (no TASK line)
+    if "replacement description" in full_lower or (
+        "failed validation" in full_lower and "description" in full_lower
+    ):
+        return "description"
+    if "replacement headline" in full_lower or (
+        "failed validation" in full_lower and "headline" in full_lower
+    ):
+        return "headline"
+
+    return "unknown"
+
+
+class MockProvider(BaseProvider):
+    """Deterministic-ish mock that returns strict JSON responses.
+
+    All four agent types (selector, headline, description, checker) return
+    valid JSON so that the real parsers can be exercised in dry-run mode.
+    """
+
+    def __init__(self, seed: int = 42, **kwargs):
+        """Initialise with an optional RNG seed.
+
+        Extra keyword arguments (e.g. a ``ProviderConfig``) are silently
+        ignored so that callers can pass the same kwargs used for the real
+        provider without crashing.
+        """
+        if not isinstance(seed, int):
+            seed = 42
         self._rng = random.Random(seed)
+        # Track the call sequence for test assertions
+        self._call_log: List[str] = []
 
     def generate(self, prompt: str, system: str = "", max_tokens: int = 2048) -> str:
-        """Parse what the prompt is asking for and return mock data.
+        """Detect prompt type and return valid JSON mock response."""
+        ptype = _detect_prompt_type(prompt)
+        self._call_log.append(ptype)
 
-        Detection priority: check the TASK line first to avoid false
-        matches from context fields like 'original_headline'.
-        """
-        # Look at the first ~200 chars (the TASK line) for the primary intent
-        task_line = prompt[:250].lower()
-
-        if "description variation" in task_line or "description" in task_line.split("task")[0] if "task" in task_line else False:
-            pass  # fall through to full check below
-
-        # More robust: count keyword occurrences in TASK line only
-        first_lines = "\n".join(prompt.splitlines()[:5]).lower()
-        if "generate" in first_lines and "description" in first_lines:
-            return self._mock_descriptions()
-        elif "generate" in first_lines and "headline" in first_lines:
+        if ptype == "selector":
+            return self._mock_strategy(prompt)
+        elif ptype == "headline":
             return self._mock_headlines()
-        # Fallback: check whole prompt
-        elif "description variation" in prompt.lower():
+        elif ptype == "description":
             return self._mock_descriptions()
-        elif "headline variation" in prompt.lower():
-            return self._mock_headlines()
+        elif ptype == "checker":
+            return self._mock_checker()
         else:
-            return "MOCK_RESPONSE: No specific type detected."
+            # Generic fallback — return headlines JSON so pipeline doesn't break
+            return self._mock_headlines()
+
+    # ── Mock response builders ────────────────────────────────────────────────
+
+    def _mock_strategy(self, prompt: str = "") -> str:
+        """Return a selector-style strategy JSON."""
+        # Try to extract ad_id from prompt for a realistic response
+        ad_id = "mock_ad"
+        for line in prompt.splitlines():
+            if "ad_id" in line.lower() or "ad id" in line.lower():
+                parts = line.split(":")
+                if len(parts) > 1:
+                    ad_id = parts[-1].strip().strip('"').strip()
+                    break
+        return json.dumps({
+            "ad_id": ad_id,
+            "analysis": (
+                "CTR is below threshold likely due to generic headline copy "
+                "that does not differentiate from competitor ads."
+            ),
+            "strategy": "Test urgency + price-anchor angle to drive immediate clicks",
+        })
 
     def _mock_headlines(self, n: int = 10) -> str:
+        """Return a headlines JSON array."""
         chosen = self._rng.sample(_HEADLINE_POOL, min(n, len(_HEADLINE_POOL)))
-        lines = [f"{i+1}. {h}" for i, h in enumerate(chosen)]
-        return "\n".join(lines)
+        return json.dumps({"headlines": chosen})
 
     def _mock_descriptions(self, n: int = 6) -> str:
+        """Return a descriptions JSON array."""
         chosen = self._rng.sample(_DESC_POOL, min(n, len(_DESC_POOL)))
-        lines = [f"{i+1}. {d}" for i, d in enumerate(chosen)]
-        return "\n".join(lines)
+        return json.dumps({"descriptions": chosen})
+
+    def _mock_checker(self) -> str:
+        """Return an empty violations list — mock copy is always compliant."""
+        return json.dumps({"violations": []})
+
+    # ── Stats helper (mirrors AnthropicProvider interface) ────────────────────
+
+    def stats(self) -> dict:
+        return {
+            "call_count": len(self._call_log),
+            "call_log": list(self._call_log),
+            "retry_count": 0,
+            "total_tokens": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "last_error": None,
+        }

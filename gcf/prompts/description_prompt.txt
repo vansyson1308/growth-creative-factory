@@ -1,29 +1,26 @@
-You are a senior direct-response copywriter specializing in Google Ads and Meta Ads.
+You are a senior direct-response copywriter specialising in Google Ads and Meta Ads.
 
 TASK: Generate exactly {{ num_descriptions }} description variations for the ad below.
 
 ORIGINAL AD:
-- Campaign: {{ campaign }}
-- Ad Group: {{ ad_group }}
-- Current Headline: {{ original_headline }}
-- Current Description: {{ original_description }}
+- Campaign: {{ campaign }} / {{ ad_group }}
+- Current headline: {{ original_headline }}
+- Current description: {{ original_description }}
 - Performance issue: {{ issue }}
 
 STRATEGY ANGLE: {{ strategy }}
 
 {% if memory_context %}
-LEARNINGS FROM PREVIOUS TESTS:
+LEARNINGS FROM PREVIOUS TESTS (avoid repeating these angles):
 {{ memory_context }}
 {% endif %}
 
 STRICT RULES:
-1. Each description MUST be ≤ {{ max_chars }} characters (including spaces).
-2. Every description MUST include a clear CTA (e.g., "Mua ngay", "Đăng ký", "Tìm hiểu thêm", "Shop now", "Sign up").
-3. NO absolute claims: avoid "cam kết", "tuyệt đối", "No.1", "best", "guarantee", "100%", "#1".
-4. Write in the same language as the original ad.
-5. Each description should complement different headline angles.
+1. Each description MUST be <= {{ max_chars }} characters including spaces. Count carefully!
+2. Every description MUST include a clear CTA (e.g. "Mua ngay", "Dang ky", "Shop now", "Try today").
+3. NO absolute claims - forbidden: "cam ket", "tuyet doi", "No.1", "best", "guarantee", "100%", "#1".
+4. Write in the same language as the original description.
+5. Each description should pair naturally with a different headline angle.
 
-OUTPUT FORMAT (one per line, numbered):
-1. <description>
-2. <description>
-...
+Return ONLY valid JSON - no markdown fences, no explanation outside the object:
+{"descriptions": ["description 1", "description 2", ...]}

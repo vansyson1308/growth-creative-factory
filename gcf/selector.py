@@ -1,12 +1,22 @@
-"""Select underperforming ads based on configurable thresholds."""
+"""Select underperforming ads and generate LLM-powered improvement strategies."""
 from __future__ import annotations
 
-from typing import List, Dict, Tuple
+import json
+import re
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
+from jinja2 import Template
 
-from gcf.config import SelectorConfig
+from gcf.config import AppConfig, SelectorConfig
 
+_STRATEGY_PROMPT_PATH = Path(__file__).parent / "prompts" / "selector_prompt.txt"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rule-based selection (unchanged)
+# ─────────────────────────────────────────────────────────────────────────────
 
 def select_underperforming(
     df: pd.DataFrame,
@@ -48,3 +58,91 @@ def select_underperforming(
         })
 
     return selected, reasons
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LLM-powered strategy generation (new)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _load_strategy_template() -> Template:
+    return Template(_STRATEGY_PROMPT_PATH.read_text(encoding="utf-8"))
+
+
+def _parse_strategy_json(raw: str, ad_id: str) -> Dict:
+    """Extract strategy dict from LLM response. Returns safe fallback on error."""
+    text = raw.strip()
+
+    # Strip markdown fences
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+    text = re.sub(r"\s*```\s*$", "", text, flags=re.MULTILINE)
+    text = text.strip()
+
+    try:
+        data = json.loads(text)
+        if "strategy" in data:
+            return data
+    except (json.JSONDecodeError, AttributeError):
+        pass
+
+    # Fallback: extract first {...} block
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            data = json.loads(match.group())
+            if "strategy" in data:
+                return data
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    # Safe fallback so pipeline never crashes on bad LLM output
+    return {
+        "ad_id": ad_id,
+        "analysis": "Analysis unavailable.",
+        "strategy": f"Improve engagement for ad {ad_id}",
+    }
+
+
+def generate_strategy(
+    provider,
+    ad_row: Dict,
+    issues: str,
+    cfg: AppConfig,
+) -> Dict:
+    """Call the selector LLM prompt to get a root-cause analysis and strategy.
+
+    Parameters
+    ----------
+    provider:
+        The active LLM (or mock) provider.
+    ad_row:
+        A single ad row dict (keys: ad_id, campaign, ad_group, headline,
+        description, ctr, cpa, roas, impressions, ...).
+    issues:
+        Human-readable issues string, e.g. "CTR 0.01 < 0.02; ROAS 0.4 < 2.0".
+    cfg:
+        Full application config.
+
+    Returns
+    -------
+    dict with keys: ad_id, analysis, strategy
+    """
+    ad_id = ad_row.get("ad_id", "")
+    tmpl = _load_strategy_template()
+    prompt = tmpl.render(
+        ad_id=ad_id,
+        campaign=ad_row.get("campaign", ""),
+        ad_group=ad_row.get("ad_group", ""),
+        headline=ad_row.get("headline", ""),
+        description=ad_row.get("description", ""),
+        impressions=ad_row.get("impressions", ""),
+        ctr=ad_row.get("ctr", ""),
+        cpa=ad_row.get("cpa", ""),
+        roas=ad_row.get("roas", ""),
+        issues=issues,
+    )
+
+    raw = provider.generate(
+        prompt,
+        system="You are an expert performance marketing analyst. Return ONLY valid JSON.",
+    )
+    return _parse_strategy_json(raw, ad_id)
