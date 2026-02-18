@@ -1,13 +1,14 @@
 """Meta Ads connector: pull insights into unified AdsRow schema."""
+
 from __future__ import annotations
 
 import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, List, Optional
 
-from gcf.config_meta_ads import MetaAdsConfig, MetaAdsConfigError, load_meta_ads_config
+from gcf.config_meta_ads import MetaAdsConfigError, load_meta_ads_config
 from gcf.mappers import adsrows_to_dataframe
 from gcf.schema import AdsRow
 
@@ -96,7 +97,10 @@ def map_meta_insight_to_adsrow(insight: dict, action_priority: List[str]) -> Ads
 
 def _is_retryable_error(exc: Exception) -> bool:
     s = str(exc).lower()
-    return any(k in s for k in ["rate", "too many", "tempor", "limit", "429", "17", "32", "613"])
+    return any(
+        k in s
+        for k in ["rate", "too many", "tempor", "limit", "429", "17", "32", "613"]
+    )
 
 
 def _fetch_with_retry(ad_account, fields, params, retry: RetryPolicy):
@@ -107,7 +111,9 @@ def _fetch_with_retry(ad_account, fields, params, retry: RetryPolicy):
         except Exception as exc:
             if attempt >= retry.max_retries or not _is_retryable_error(exc):
                 raise
-            sleep_s = min(retry.backoff_base_seconds * (2 ** attempt), retry.backoff_max_seconds)
+            sleep_s = min(
+                retry.backoff_base_seconds * (2**attempt), retry.backoff_max_seconds
+            )
             sleep_s += random.uniform(0, retry.jitter_seconds)
             time.sleep(sleep_s)
             attempt += 1
@@ -124,15 +130,19 @@ def pull_meta_ads_rows(
 
     if ad_account is None:
         try:
-            from facebook_business.api import FacebookAdsApi
             from facebook_business.adobjects.adaccount import AdAccount
+            from facebook_business.api import FacebookAdsApi
         except Exception as exc:  # pragma: no cover
             raise MetaAdsConnectorError(
                 "facebook_business SDK missing. Install `facebook-business` and retry."
             ) from exc
 
         try:
-            FacebookAdsApi.init(access_token=cfg.access_token, app_id=cfg.app_id, app_secret=cfg.app_secret)
+            FacebookAdsApi.init(
+                access_token=cfg.access_token,
+                app_id=cfg.app_id,
+                app_secret=cfg.app_secret,
+            )
             ad_account = AdAccount(cfg.ad_account_id)
         except Exception as exc:
             raise MetaAdsConnectorError(
@@ -141,10 +151,16 @@ def pull_meta_ads_rows(
             ) from exc
 
     fields = [
-        "campaign_name", "adset_name", "ad_id",
-        "impressions", "clicks", "spend",
-        "actions", "action_values",
-        "date_start", "date_stop",
+        "campaign_name",
+        "adset_name",
+        "ad_id",
+        "impressions",
+        "clicks",
+        "spend",
+        "actions",
+        "action_values",
+        "date_start",
+        "date_stop",
     ]
     params = {
         "date_preset": date_preset,
@@ -175,7 +191,9 @@ def pull_meta_ads_rows(
         if _is_retryable_error(exc):
             # one more full retry pass on transient paging errors
             cursor = _fetch_with_retry(ad_account, fields, params, retry)
-            rows = [map_meta_insight_to_adsrow(dict(i), cfg.action_priority) for i in cursor]
+            rows = [
+                map_meta_insight_to_adsrow(dict(i), cfg.action_priority) for i in cursor
+            ]
         else:
             raise MetaAdsConnectorError(f"Meta Ads pagination failed: {exc}") from exc
 

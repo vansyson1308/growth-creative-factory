@@ -1,4 +1,5 @@
 """Configuration loader/validator for Google Ads connector (BYO creds)."""
+
 from __future__ import annotations
 
 import os
@@ -27,7 +28,9 @@ def _clean(v) -> str:
     return str(v or "").strip()
 
 
-def load_google_ads_config(customer_id: Optional[str] = None, yaml_path: Optional[str] = None) -> GoogleAdsConfig:
+def load_google_ads_config(
+    customer_id: Optional[str] = None, yaml_path: Optional[str] = None
+) -> GoogleAdsConfig:
     """Load config from env and optional google-ads.yaml style file.
 
     Priority:
@@ -43,22 +46,40 @@ def load_google_ads_config(customer_id: Optional[str] = None, yaml_path: Optiona
         raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
     # Accept both canonical and uppercase env style keys
-    dev = _clean(os.environ.get("GCF_GOOGLE_ADS_DEVELOPER_TOKEN") or raw.get("developer_token"))
+    dev = _clean(
+        os.environ.get("GCF_GOOGLE_ADS_DEVELOPER_TOKEN") or raw.get("developer_token")
+    )
     cid = _clean(os.environ.get("GCF_GOOGLE_ADS_CLIENT_ID") or raw.get("client_id"))
-    csec = _clean(os.environ.get("GCF_GOOGLE_ADS_CLIENT_SECRET") or raw.get("client_secret"))
-    rtok = _clean(os.environ.get("GCF_GOOGLE_ADS_REFRESH_TOKEN") or raw.get("refresh_token"))
-    lcid = _clean(os.environ.get("GCF_GOOGLE_ADS_LOGIN_CUSTOMER_ID") or raw.get("login_customer_id")) or None
+    csec = _clean(
+        os.environ.get("GCF_GOOGLE_ADS_CLIENT_SECRET") or raw.get("client_secret")
+    )
+    rtok = _clean(
+        os.environ.get("GCF_GOOGLE_ADS_REFRESH_TOKEN") or raw.get("refresh_token")
+    )
+    lcid = (
+        _clean(
+            os.environ.get("GCF_GOOGLE_ADS_LOGIN_CUSTOMER_ID")
+            or raw.get("login_customer_id")
+        )
+        or None
+    )
 
-    cust = _clean(customer_id or os.environ.get("GCF_GOOGLE_ADS_CUSTOMER_ID") or raw.get("customer_id"))
+    cust = _clean(
+        customer_id
+        or os.environ.get("GCF_GOOGLE_ADS_CUSTOMER_ID")
+        or raw.get("customer_id")
+    )
 
     missing = [
-        name for name, value in [
+        name
+        for name, value in [
             ("developer_token", dev),
             ("client_id", cid),
             ("client_secret", csec),
             ("refresh_token", rtok),
             ("customer_id", cust),
-        ] if not value
+        ]
+        if not value
     ]
     if missing:
         raise GoogleAdsConfigError(

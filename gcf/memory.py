@@ -29,6 +29,7 @@ JSONL schema (one JSON object per line)::
 Old entries (schema before this version) used ``inputs`` / ``outputs`` keys.
 :func:`load_memory` normalises them transparently on load.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,10 +39,10 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _ensure_file(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -71,7 +72,7 @@ def _normalize(entry: Dict[str, Any]) -> Dict[str, Any]:
         if "headlines" in out or "descriptions" in out:
             # Old generation entry
             entry["generated"] = {
-                "headlines":    out.get("headlines", []),
+                "headlines": out.get("headlines", []),
                 "descriptions": out.get("descriptions", []),
             }
         elif any(k in out for k in ("ctr", "cpa", "roas")):
@@ -105,6 +106,7 @@ def _rewrite(path: Path, entries: List[Dict]) -> None:
 # Public API
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def append_entry(
     memory_path: str | Path,
     *,
@@ -131,17 +133,17 @@ def append_entry(
     p = Path(memory_path)
     _ensure_file(p)
     entry = {
-        "date":           datetime.now(timezone.utc).isoformat(),
-        "campaign":       campaign,
-        "ad_group":       ad_group,
-        "ad_id":          ad_id,
-        "hypothesis":     hypothesis,
-        "angle":          angle,
-        "tag":            tag,
+        "date": datetime.now(timezone.utc).isoformat(),
+        "campaign": campaign,
+        "ad_group": ad_group,
+        "ad_id": ad_id,
+        "hypothesis": hypothesis,
+        "angle": angle,
+        "tag": tag,
         "variant_set_id": variant_set_id,
-        "generated":      generated,
-        "notes":          notes,
-        "results":        results,
+        "generated": generated,
+        "notes": notes,
+        "results": results,
     }
     with open(p, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -238,19 +240,21 @@ def ingest_performance(
                 v = row.get(key, "")
                 return "" if str(v).strip() in ("nan", "NaN") else str(v).strip()
 
-            new_entry = _normalize({
-                "date":           datetime.now(timezone.utc).isoformat(),
-                "campaign":       _str("campaign"),
-                "ad_group":       _str("ad_group"),
-                "ad_id":          _str("ad_id"),
-                "hypothesis":     "performance_ingest",
-                "angle":          _str("angle"),
-                "tag":            _str("tag"),
-                "variant_set_id": vsid,
-                "generated":      {"headlines": [], "descriptions": []},
-                "notes":          _str("notes"),
-                "results":        results if results else None,
-            })
+            new_entry = _normalize(
+                {
+                    "date": datetime.now(timezone.utc).isoformat(),
+                    "campaign": _str("campaign"),
+                    "ad_group": _str("ad_group"),
+                    "ad_id": _str("ad_id"),
+                    "hypothesis": "performance_ingest",
+                    "angle": _str("angle"),
+                    "tag": _str("tag"),
+                    "variant_set_id": vsid,
+                    "generated": {"headlines": [], "descriptions": []},
+                    "notes": _str("notes"),
+                    "results": results if results else None,
+                }
+            )
             entries.append(new_entry)
             appended += 1
 
@@ -262,6 +266,7 @@ def ingest_performance(
 # ─────────────────────────────────────────────────────────────────────────────
 # Analytics helpers (used by Learning Board)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def get_top_angles(
     entries: List[Dict],
@@ -290,11 +295,13 @@ def get_top_angles(
         val = r.get(metric)
         if val is None:
             continue
-        rows.append({
-            "angle":    e.get("angle") or "(no angle)",
-            "campaign": e.get("campaign", ""),
-            metric:     float(val),
-        })
+        rows.append(
+            {
+                "angle": e.get("angle") or "(no angle)",
+                "campaign": e.get("campaign", ""),
+                metric: float(val),
+            }
+        )
 
     if not rows:
         return pd.DataFrame(
@@ -319,17 +326,19 @@ def get_recent_experiments(
     for e in recent:
         r = e.get("results") or {}
         gen = e.get("generated") or {}
-        rows.append({
-            "date":           (e.get("date") or "")[:10],
-            "campaign":       e.get("campaign", ""),
-            "ad_id":          e.get("ad_id", ""),
-            "angle":          e.get("angle") or "—",
-            "variant_set_id": e.get("variant_set_id", ""),
-            "headlines#":     len(gen.get("headlines", [])),
-            "descs#":         len(gen.get("descriptions", [])),
-            "results":        "✅" if r else "—",
-            "roas":           r.get("roas"),
-            "ctr":            r.get("ctr"),
-            "cpa":            r.get("cpa"),
-        })
+        rows.append(
+            {
+                "date": (e.get("date") or "")[:10],
+                "campaign": e.get("campaign", ""),
+                "ad_id": e.get("ad_id", ""),
+                "angle": e.get("angle") or "—",
+                "variant_set_id": e.get("variant_set_id", ""),
+                "headlines#": len(gen.get("headlines", [])),
+                "descs#": len(gen.get("descriptions", [])),
+                "results": "✅" if r else "—",
+                "roas": r.get("roas"),
+                "ctr": r.get("ctr"),
+                "cpa": r.get("cpa"),
+            }
+        )
     return pd.DataFrame(rows)

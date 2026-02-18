@@ -1,9 +1,10 @@
 """Deduplicate near-identical ad copy and enforce angle diversity."""
+
 from __future__ import annotations
 
+import re
 from collections import Counter
 from difflib import SequenceMatcher
-import re
 from typing import Dict, List, Sequence, Tuple
 
 try:
@@ -11,7 +12,9 @@ try:
 
     def _ratio(a: str, b: str) -> float:
         return _rfuzz.ratio(a, b)
+
 except ImportError:
+
     def _ratio(a: str, b: str) -> float:
         return SequenceMatcher(None, a, b).ratio() * 100
 
@@ -26,10 +29,16 @@ ANGLE_BUCKETS: List[str] = [
 
 _ANGLE_PATTERNS = {
     "urgency": [r"\b(now|today|limited|ending|deadline|hurry|ngay|hom nay|co han)\b"],
-    "social_proof": [r"\b(\d+k|\d+\+|customers|users|trusted|review|đánh giá|khach hang)\b"],
-    "problem_solution": [r"\b(problem|pain|issue|fix|solve|solution|giai phap|khac phuc)\b"],
+    "social_proof": [
+        r"\b(\d+k|\d+\+|customers|users|trusted|review|đánh giá|khach hang)\b"
+    ],
+    "problem_solution": [
+        r"\b(problem|pain|issue|fix|solve|solution|giai phap|khac phuc)\b"
+    ],
     "curiosity": [r"\b(discover|secret|why|what if|bi mat|kham pha|tai sao)\b"],
-    "benefit": [r"\b(save|better|easy|faster|value|benefit|tiet kiem|de dang|hieu qua)\b"],
+    "benefit": [
+        r"\b(save|better|easy|faster|value|benefit|tiet kiem|de dang|hieu qua)\b"
+    ],
 }
 
 
@@ -60,7 +69,13 @@ def detect_angle_bucket(text: str) -> str:
     if not t:
         return "benefit"
 
-    for bucket in ["urgency", "social_proof", "problem_solution", "curiosity", "benefit"]:
+    for bucket in [
+        "urgency",
+        "social_proof",
+        "problem_solution",
+        "curiosity",
+        "benefit",
+    ]:
         for pat in _ANGLE_PATTERNS.get(bucket, []):
             if re.search(pat, t):
                 return bucket
@@ -126,7 +141,9 @@ def enforce_diversity(
     if len(present) >= min_distinct_angles:
         missing: List[str] = []
     else:
-        missing = [b for b in buckets if distribution.get(b, 0) == 0][: (min_distinct_angles - len(present))]
+        missing = [b for b in buckets if distribution.get(b, 0) == 0][
+            : (min_distinct_angles - len(present))
+        ]
 
     return selected, missing, distribution
 

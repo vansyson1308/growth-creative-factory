@@ -1,4 +1,5 @@
 """Tests for Meta Ads connector mapping and pull flow with mocking."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -44,13 +45,17 @@ def test_pull_meta_ads_rows_with_mock_account(tmp_path):
             return [_sample_insight()]
 
     with patch("gcf.connectors.meta_ads.load_meta_ads_config") as mock_cfg:
-        mock_cfg.return_value = type("Cfg", (), {
-            "access_token": "tok",
-            "ad_account_id": "act_1",
-            "app_id": None,
-            "app_secret": None,
-            "action_priority": ["purchase", "lead"],
-        })()
+        mock_cfg.return_value = type(
+            "Cfg",
+            (),
+            {
+                "access_token": "tok",
+                "ad_account_id": "act_1",
+                "app_id": None,
+                "app_secret": None,
+                "action_priority": ["purchase", "lead"],
+            },
+        )()
         rows = pull_meta_ads_rows(out_path=str(out), ad_account=MockAccount())
 
     assert len(rows) == 1

@@ -1,11 +1,10 @@
 """Tests for Google Ads config validation."""
-from __future__ import annotations
 
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
-from gcf.config_google_ads import load_google_ads_config, GoogleAdsConfigError
+from gcf.config_google_ads import GoogleAdsConfigError, load_google_ads_config
 
 
 def test_load_from_yaml(tmp_path):

@@ -1,4 +1,5 @@
 """Mock provider for dry-run mode — no API calls, strict JSON responses."""
+
 from __future__ import annotations
 
 import json
@@ -54,13 +55,18 @@ def _detect_prompt_type(prompt: str) -> str:
         return "checker"
 
     # Selector: analyses underperforming ads
-    if "performance marketing analyst" in full_lower or "root-cause" in full_lower or (
-        "analyse" in first_lines and "underperforming" in first_lines
+    if (
+        "performance marketing analyst" in full_lower
+        or "root-cause" in full_lower
+        or ("analyse" in first_lines and "underperforming" in first_lines)
     ):
         return "selector"
 
     # Brand-voice guidance prompt
-    if "brand voice strategist" in full_lower or "create a concise brand voice guideline" in full_lower:
+    if (
+        "brand voice strategist" in full_lower
+        or "create a concise brand voice guideline" in full_lower
+    ):
         return "brand_voice"
 
     # Description vs. headline — check TASK line first
@@ -133,24 +139,27 @@ class MockProvider(BaseProvider):
                 if len(parts) > 1:
                     ad_id = parts[-1].strip().strip('"').strip()
                     break
-        return json.dumps({
-            "ad_id": ad_id,
-            "analysis": (
-                "CTR is below threshold likely due to generic headline copy "
-                "that does not differentiate from competitor ads."
-            ),
-            "strategy": "Test urgency + price-anchor angle to drive immediate clicks",
-        })
-
+        return json.dumps(
+            {
+                "ad_id": ad_id,
+                "analysis": (
+                    "CTR is below threshold likely due to generic headline copy "
+                    "that does not differentiate from competitor ads."
+                ),
+                "strategy": "Test urgency + price-anchor angle to drive immediate clicks",
+            }
+        )
 
     def _mock_brand_voice(self) -> str:
-        return json.dumps({
-            "guideline": "Use a clear, helpful, action-focused tone for value-aware buyers.",
-            "examples": [
-                "Save time with practical features. Try it today.",
-                "Straightforward value for busy teams. Get started now.",
-            ],
-        })
+        return json.dumps(
+            {
+                "guideline": "Use a clear, helpful, action-focused tone for value-aware buyers.",
+                "examples": [
+                    "Save time with practical features. Try it today.",
+                    "Straightforward value for busy teams. Get started now.",
+                ],
+            }
+        )
 
     def _mock_headlines(self, n: int = 10) -> str:
         """Return a headlines JSON array."""

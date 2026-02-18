@@ -4,6 +4,7 @@ Two top-level tabs:
   🧙 Wizard      — 4-step flow: Upload → Select → Generate → Export
   📊 Learning Board — top angles, blacklist phrases, recent experiments
 """
+
 from __future__ import annotations
 
 import io
@@ -16,22 +17,22 @@ from typing import Dict, List
 import pandas as pd
 import streamlit as st
 
-from gcf.config import load_config, AppConfig
-from gcf.io_csv import read_ads_csv, InputSchemaError
-from gcf.selector import select_underperforming
-from gcf.generator_headline import generate_headlines
+from gcf.config import AppConfig, load_config
+from gcf.connectors.google_ads import GoogleAdsConnectorError, pull_google_ads_rows
+from gcf.connectors.google_sheets import GoogleSheetsConfigError, push_tabular_file
+from gcf.connectors.meta_ads import MetaAdsConnectorError, pull_meta_ads_rows
 from gcf.generator_description import generate_descriptions
-from gcf.pipeline import _format_report
-from gcf.providers.mock_provider import MockProvider
-from gcf.connectors.google_sheets import push_tabular_file, GoogleSheetsConfigError
-from gcf.connectors.google_ads import pull_google_ads_rows, GoogleAdsConnectorError
-from gcf.connectors.meta_ads import pull_meta_ads_rows, MetaAdsConnectorError
+from gcf.generator_headline import generate_headlines
+from gcf.io_csv import InputSchemaError, read_ads_csv
 from gcf.memory import (
     append_entry,
-    load_memory,
-    get_top_angles,
     get_recent_experiments,
+    get_top_angles,
+    load_memory,
 )
+from gcf.pipeline import _format_report
+from gcf.providers.mock_provider import MockProvider
+from gcf.selector import select_underperforming
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -126,9 +127,11 @@ def _build_handoff_csv_bytes(new_ads_rows: List[Dict]) -> bytes:
     for col in ("variant_set_id", "TAG", "H1", "DESC", "status", "notes"):
         if col not in df.columns:
             df[col] = ""
-    return df[["variant_set_id", "TAG", "H1", "DESC", "status", "notes"]].to_csv(
-        index=False, encoding="utf-8"
-    ).encode("utf-8")
+    return (
+        df[["variant_set_id", "TAG", "H1", "DESC", "status", "notes"]]
+        .to_csv(index=False, encoding="utf-8")
+        .encode("utf-8")
+    )
 
 
 def _build_figma_tsv_bytes(rows: List[Dict]) -> bytes:
@@ -273,9 +276,17 @@ def step1() -> None:
         st.success(f"✅ **{len(df)} ads loaded** from `{uploaded.name}`.")
 
         preview_cols = [
-            c for c in
-            ["campaign", "ad_group", "ad_id", "headline", "description",
-             "impressions", "clicks", "cost"]
+            c
+            for c in [
+                "campaign",
+                "ad_group",
+                "ad_id",
+                "headline",
+                "description",
+                "impressions",
+                "clicks",
+                "cost",
+            ]
             if c in df.columns
         ]
         with st.expander("👀 Preview — first 5 rows"):
@@ -285,8 +296,13 @@ def step1() -> None:
         if st.button("Next: Select underperformers →", type="primary"):
             # Clear all downstream state from any previous run
             for key in [
-                "selected_ids", "new_ads_rows", "figma_rows",
-                "generation_done", "summary", "report_text", "generation_approved",
+                "selected_ids",
+                "new_ads_rows",
+                "figma_rows",
+                "generation_done",
+                "summary",
+                "report_text",
+                "generation_approved",
                 "_cfg_draft",
             ]:
                 st.session_state.pop(key, None)
@@ -339,8 +355,17 @@ def step2() -> None:
     reason_map = {r["ad_id"]: r["reasons"] for r in reasons}
 
     display_cols = [
-        c for c in
-        ["ad_id", "campaign", "ad_group", "headline", "impressions", "ctr", "cpa", "roas"]
+        c
+        for c in [
+            "ad_id",
+            "campaign",
+            "ad_group",
+            "headline",
+            "impressions",
+            "ctr",
+            "cpa",
+            "roas",
+        ]
         if c in selected_df.columns
     ]
     display_df = selected_df[display_cols].copy()
@@ -367,8 +392,14 @@ def step2() -> None:
     all_ids = selected_df["ad_id"].tolist()
 
     id_to_headline: Dict[str, str] = dict(
-        zip(selected_df["ad_id"],
-            selected_df["headline"] if "headline" in selected_df.columns else selected_df["ad_id"])
+        zip(
+            selected_df["ad_id"],
+            (
+                selected_df["headline"]
+                if "headline" in selected_df.columns
+                else selected_df["ad_id"]
+            ),
+        )
     )
 
     chosen_ids: List[str] = st.multiselect(
@@ -388,7 +419,11 @@ def step2() -> None:
             st.session_state.wizard_step = 1
             st.rerun()
     with col_next:
-        label = f"Next: Generate for {len(chosen_ids)} ad(s) →" if chosen_ids else "Select ads first"
+        label = (
+            f"Next: Generate for {len(chosen_ids)} ad(s) →"
+            if chosen_ids
+            else "Select ads first"
+        )
         if st.button(label, type="primary", disabled=not chosen_ids):
             st.session_state.selected_ids = chosen_ids
             st.session_state.pop("generation_done", None)
@@ -427,7 +462,9 @@ def _run_generation(
         strategy = f"Improve engagement for ad {ad.get('ad_id', '')} — boost CTR/ROAS"
 
         progress.progress(idx / n, text=f"⏳ Ad {idx + 1}/{n} — {ad.get('ad_id', '')}")
-        status.caption(f"Generating headlines + descriptions for **{ad.get('ad_id', '')}**…")
+        status.caption(
+            f"Generating headlines + descriptions for **{ad.get('ad_id', '')}**…"
+        )
 
         headlines, h_fail = generate_headlines(provider, ad, strategy, cfg, "")
         descriptions, d_fail = generate_descriptions(provider, ad, strategy, cfg, "")
@@ -444,17 +481,19 @@ def _run_generation(
 
         for ci, (h, d) in enumerate(combos):
             tag = f"V{ci + 1:03d}"
-            new_ads_rows.append({
-                "campaign":             ad.get("campaign", ""),
-                "ad_group":             ad.get("ad_group", ""),
-                "ad_id":                ad.get("ad_id", ""),
-                "original_headline":    ad.get("headline", ""),
-                "original_description": ad.get("description", ""),
-                "variant_headline":     h,
-                "variant_description":  d,
-                "variant_set_id":       variant_set_id,
-                "tag":                  tag,
-            })
+            new_ads_rows.append(
+                {
+                    "campaign": ad.get("campaign", ""),
+                    "ad_group": ad.get("ad_group", ""),
+                    "ad_id": ad.get("ad_id", ""),
+                    "original_headline": ad.get("headline", ""),
+                    "original_description": ad.get("description", ""),
+                    "variant_headline": h,
+                    "variant_description": d,
+                    "variant_set_id": variant_set_id,
+                    "tag": tag,
+                }
+            )
             figma_rows.append({"H1": h, "DESC": d, "TAG": tag})
 
         # ── Log to memory ────────────────────────────────────────────────────
@@ -472,27 +511,29 @@ def _run_generation(
         except Exception:
             pass  # memory logging is non-critical; never block the wizard
 
-        report_details.append({
-            "ad_id":                  ad.get("ad_id", ""),
-            "campaign":               ad.get("campaign", ""),
-            "issue":                  ad["_issue"],
-            "strategy":               strategy,
-            "headlines_generated":    len(headlines),
-            "descriptions_generated": len(descriptions),
-            "combos":                 len(combos),
-            "variant_set_id":         variant_set_id,
-        })
+        report_details.append(
+            {
+                "ad_id": ad.get("ad_id", ""),
+                "campaign": ad.get("campaign", ""),
+                "issue": ad["_issue"],
+                "strategy": strategy,
+                "headlines_generated": len(headlines),
+                "descriptions_generated": len(descriptions),
+                "combos": len(combos),
+                "variant_set_id": variant_set_id,
+            }
+        )
 
     progress.progress(1.0, text="✅ Generation complete!")
     status.empty()
 
     summary: Dict = {
-        "total_ads":          len(df),
-        "selected":           n,
+        "total_ads": len(df),
+        "selected": n,
         "variants_generated": len(new_ads_rows),
-        "pass_count":         total_pass,
-        "fail_count":         total_fail,
-        "message":            f"Wizard run · mode={actual_mode}",
+        "pass_count": total_pass,
+        "fail_count": total_fail,
+        "message": f"Wizard run · mode={actual_mode}",
     }
     return new_ads_rows, figma_rows, summary, _format_report(summary, report_details)
 
@@ -501,10 +542,10 @@ def step3() -> None:
     if not _require_state("df", "cfg", "mode", "selected_ids"):
         return
 
-    df: pd.DataFrame       = st.session_state.df
-    cfg: AppConfig         = st.session_state.cfg
-    mode: str              = st.session_state.mode
-    chosen_ids: List[str]  = st.session_state.selected_ids
+    df: pd.DataFrame = st.session_state.df
+    cfg: AppConfig = st.session_state.cfg
+    mode: str = st.session_state.mode
+    chosen_ids: List[str] = st.session_state.selected_ids
 
     st.header("Step 3 — Generate ad variations")
     st.markdown(
@@ -519,31 +560,32 @@ def step3() -> None:
         rows, figma_rows, summary, report_text = _run_generation(
             df, chosen_ids, cfg, mode
         )
-        st.session_state.new_ads_rows        = rows
-        st.session_state.figma_rows          = figma_rows
-        st.session_state.summary             = summary
-        st.session_state.report_text         = report_text
-        st.session_state.generation_done     = True
+        st.session_state.new_ads_rows = rows
+        st.session_state.figma_rows = figma_rows
+        st.session_state.summary = summary
+        st.session_state.report_text = report_text
+        st.session_state.generation_done = True
         st.session_state.generation_approved = False
 
     # ── Stats ────────────────────────────────────────────────────────────────
-    summary: Dict        = st.session_state.summary
+    summary: Dict = st.session_state.summary
     figma_rows: List[Dict] = st.session_state.figma_rows
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ads processed",       summary["selected"])
-    c2.metric("Variants generated",  summary["variants_generated"])
-    c3.metric("Copy passed",         summary["pass_count"])
-    c4.metric("Copy failed",         summary["fail_count"],
-              delta=f"-{summary['fail_count']}" if summary["fail_count"] else None,
-              delta_color="inverse")
+    c1.metric("Ads processed", summary["selected"])
+    c2.metric("Variants generated", summary["variants_generated"])
+    c3.metric("Copy passed", summary["pass_count"])
+    c4.metric(
+        "Copy failed",
+        summary["fail_count"],
+        delta=f"-{summary['fail_count']}" if summary["fail_count"] else None,
+        delta_color="inverse",
+    )
 
     # ── TSV preview ──────────────────────────────────────────────────────────
     if figma_rows:
         n_preview = min(MAX_PREVIEW_ROWS, len(figma_rows))
-        st.subheader(
-            f"Figma TSV preview — first {n_preview} of {len(figma_rows)} rows"
-        )
+        st.subheader(f"Figma TSV preview — first {n_preview} of {len(figma_rows)} rows")
         st.dataframe(pd.DataFrame(figma_rows[:n_preview]), use_container_width=True)
         if len(figma_rows) > MAX_PREVIEW_ROWS:
             st.caption(
@@ -563,7 +605,7 @@ def step3() -> None:
     with col_back:
         if st.button("← Back to Select"):
             # Clear so that returning to Step 3 re-generates with the new selection
-            st.session_state.pop("generation_done",     None)
+            st.session_state.pop("generation_done", None)
             st.session_state.pop("generation_approved", None)
             st.session_state.wizard_step = 2
             st.rerun()
@@ -613,22 +655,22 @@ def step4() -> None:
     )
 
     new_ads_rows: List[Dict] = st.session_state.new_ads_rows
-    figma_rows:   List[Dict] = st.session_state.figma_rows
-    report_text:  str        = st.session_state.report_text
-    summary:      Dict       = st.session_state.summary
+    figma_rows: List[Dict] = st.session_state.figma_rows
+    report_text: str = st.session_state.report_text
+    summary: Dict = st.session_state.summary
 
     # ── Build in-memory bytes (generated once per render) ────────────────────
-    new_ads_bytes    = _build_new_ads_csv_bytes(new_ads_rows)
-    figma_tsv_bytes  = _build_figma_tsv_bytes(figma_rows)
-    handoff_bytes    = _build_handoff_csv_bytes(new_ads_rows)
-    report_bytes     = report_text.encode("utf-8")
+    new_ads_bytes = _build_new_ads_csv_bytes(new_ads_rows)
+    figma_tsv_bytes = _build_figma_tsv_bytes(figma_rows)
+    handoff_bytes = _build_handoff_csv_bytes(new_ads_rows)
+    report_bytes = report_text.encode("utf-8")
 
     # ── Summary bar ──────────────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Total ads in CSV",       summary["total_ads"])
-    c2.metric("Ads processed",          summary["selected"])
-    c3.metric("Variant combinations",   summary["variants_generated"])
-    c4.metric("Figma rows",             len(figma_rows))
+    c1.metric("Total ads in CSV", summary["total_ads"])
+    c2.metric("Ads processed", summary["selected"])
+    c3.metric("Variant combinations", summary["variants_generated"])
+    c4.metric("Figma rows", len(figma_rows))
 
     st.divider()
 
@@ -663,7 +705,6 @@ def step4() -> None:
             use_container_width=True,
             type="primary",
         )
-
 
     with col_handoff:
         st.markdown("##### 🤝 handoff.csv")
@@ -810,7 +851,7 @@ def learning_board() -> None:
                     key="lb_top_n",
                 )
 
-            ascending = sel_metric == "cpa"   # lower CPA = better
+            ascending = sel_metric == "cpa"  # lower CPA = better
             df_angles = get_top_angles(
                 entries,
                 metric=sel_metric,
@@ -925,21 +966,24 @@ The fail count shown in Step 3 includes both char-limit failures and policy viol
                 pass
 
 
-
-
 def handoff_tab() -> None:
     st.header("🤝 Handoff (Optional Google Sheets)")
-    st.caption("Push generated TSV/CSV outputs to Google Sheets, or continue with local files only.")
+    st.caption(
+        "Push generated TSV/CSV outputs to Google Sheets, or continue with local files only."
+    )
 
     spreadsheet_id = st.text_input("Spreadsheet ID", key="handoff_spreadsheet_id")
-    ws_tsv = st.text_input("Worksheet for TSV", value="Variations", key="handoff_ws_tsv")
+    ws_tsv = st.text_input(
+        "Worksheet for TSV", value="Variations", key="handoff_ws_tsv"
+    )
     ws_csv = st.text_input("Worksheet for CSV", value="Ads", key="handoff_ws_csv")
 
     tsv_path = Path("output/figma_variations.tsv")
     csv_path = Path("output/new_ads.csv")
 
     creds_present = bool(
-        os.environ.get("GCF_GOOGLE_CREDS_JSON") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        os.environ.get("GCF_GOOGLE_CREDS_JSON")
+        or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     )
     if not creds_present:
         st.info(
@@ -956,7 +1000,11 @@ def handoff_tab() -> None:
                 st.error("TSV file not found: output/figma_variations.tsv")
             else:
                 try:
-                    n = push_tabular_file(spreadsheet_id.strip(), ws_tsv.strip() or "Variations", str(tsv_path))
+                    n = push_tabular_file(
+                        spreadsheet_id.strip(),
+                        ws_tsv.strip() or "Variations",
+                        str(tsv_path),
+                    )
                     st.success(f"Pushed {n} rows to {ws_tsv}.")
                 except GoogleSheetsConfigError as exc:
                     st.error(str(exc))
@@ -971,7 +1019,9 @@ def handoff_tab() -> None:
                 st.error("CSV file not found: output/new_ads.csv")
             else:
                 try:
-                    n = push_tabular_file(spreadsheet_id.strip(), ws_csv.strip() or "Ads", str(csv_path))
+                    n = push_tabular_file(
+                        spreadsheet_id.strip(), ws_csv.strip() or "Ads", str(csv_path)
+                    )
                     st.success(f"Pushed {n} rows to {ws_csv}.")
                 except GoogleSheetsConfigError as exc:
                     st.error(str(exc))
@@ -980,8 +1030,9 @@ def handoff_tab() -> None:
 
     st.divider()
     st.markdown("### Local fallback")
-    st.caption("No Google Sheets? Continue downloading files from Step 4 in the Wizard.")
-
+    st.caption(
+        "No Google Sheets? Continue downloading files from Step 4 in the Wizard."
+    )
 
 
 def connectors_tab() -> None:
@@ -991,9 +1042,13 @@ def connectors_tab() -> None:
 
     with tab_ga:
         st.subheader("Google Ads (optional)")
-        st.caption("Pull performance data into `input/ads.csv` using your own Google Ads credentials.")
+        st.caption(
+            "Pull performance data into `input/ads.csv` using your own Google Ads credentials."
+        )
 
-        customer_id = st.text_input("Customer ID", key="ga_customer_id", placeholder="1234567890")
+        customer_id = st.text_input(
+            "Customer ID", key="ga_customer_id", placeholder="1234567890"
+        )
         date_range = st.selectbox(
             "Date range",
             ["LAST_7_DAYS", "LAST_14_DAYS", "LAST_30_DAYS", "THIS_MONTH", "LAST_MONTH"],
@@ -1030,7 +1085,9 @@ def connectors_tab() -> None:
 
     with tab_meta:
         st.subheader("Meta Ads (optional)")
-        st.caption("Pull Meta Ads insights into `input/ads.csv` using your own token/account ID.")
+        st.caption(
+            "Pull Meta Ads insights into `input/ads.csv` using your own token/account ID."
+        )
 
         date_preset = st.selectbox(
             "Date preset",
@@ -1059,6 +1116,7 @@ def connectors_tab() -> None:
                 "See docs/CONNECT_META_ADS.md"
             )
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1078,7 +1136,9 @@ def main() -> None:
     st.title("🚀 Growth Creative Factory")
     st.caption("AI-powered ad variation pipeline · 4-step wizard for marketing teams")
 
-    tab_wizard, tab_board, tab_handoff, tab_connectors = st.tabs(["🧙 Wizard", "📊 Learning Board", "🤝 Handoff", "🔌 Connectors"])
+    tab_wizard, tab_board, tab_handoff, tab_connectors = st.tabs(
+        ["🧙 Wizard", "📊 Learning Board", "🤝 Handoff", "🔌 Connectors"]
+    )
 
     with tab_wizard:
         _render_stepper(st.session_state.wizard_step)

@@ -19,6 +19,7 @@ Usage::
         # ... call LLM ...
         store.set(key + ":headlines", json.dumps(headlines))
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -27,10 +28,10 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Cache store
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class CacheStore:
     """Persistent LLM response cache backed by SQLite."""
@@ -46,13 +47,15 @@ class CacheStore:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS llm_cache (
                     key        TEXT PRIMARY KEY,
                     value      TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
                 )
-            """)
+            """
+            )
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
@@ -114,6 +117,7 @@ class CacheStore:
 # Key helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def make_cache_key(ad_id: str, cfg_fingerprint: str, hypothesis: str) -> str:
     """Return a SHA-256 hex digest for the (ad_id, config, hypothesis) triple.
 
@@ -141,11 +145,11 @@ def config_fingerprint(cfg) -> str:
     gen = cfg.generation
     prov = cfg.provider
     parts = {
-        "num_headlines":        gen.num_headlines,
-        "num_descriptions":     gen.num_descriptions,
-        "max_headline_chars":   gen.max_headline_chars,
+        "num_headlines": gen.num_headlines,
+        "num_descriptions": gen.num_descriptions,
+        "max_headline_chars": gen.max_headline_chars,
         "max_description_chars": gen.max_description_chars,
-        "model":                prov.model,
-        "temperature":          prov.temperature,
+        "model": prov.model,
+        "temperature": prov.temperature,
     }
     return json.dumps(parts, sort_keys=True)

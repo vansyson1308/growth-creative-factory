@@ -1,25 +1,28 @@
 """CLI entry point for Growth Creative Factory."""
+
 from __future__ import annotations
 
 import click
-from pathlib import Path
 
+from gcf import __version__
 from gcf.config import load_config
-from gcf.pipeline import run_pipeline
-from gcf.io_csv import read_performance_csv, InputSchemaError
+from gcf.connectors.google_ads import GoogleAdsConnectorError, pull_google_ads_rows
+from gcf.connectors.google_sheets import GoogleSheetsConfigError, push_tabular_file
+from gcf.connectors.meta_ads import MetaAdsConnectorError, pull_meta_ads_rows
+from gcf.io_csv import InputSchemaError, read_performance_csv
 from gcf.memory import ingest_performance
-from gcf.connectors.google_sheets import push_tabular_file, GoogleSheetsConfigError
-from gcf.connectors.google_ads import pull_google_ads_rows, GoogleAdsConnectorError
-from gcf.connectors.meta_ads import pull_meta_ads_rows, MetaAdsConnectorError
+from gcf.pipeline import run_pipeline
 
 
 def _get_provider(cfg, mode: str):
     """Return the appropriate provider based on mode."""
     if mode == "dry":
         from gcf.providers.mock_provider import MockProvider
+
         return MockProvider()
     else:
         from gcf.providers.anthropic_provider import AnthropicProvider
+
         pcfg = cfg.provider
         return AnthropicProvider(
             model=pcfg.model,
@@ -31,6 +34,7 @@ def _get_provider(cfg, mode: str):
 
 
 @click.group()
+@click.version_option(version=__version__, prog_name="gcf")
 def cli():
     """Growth Creative Factory — AI ad variation pipeline."""
     pass
@@ -39,7 +43,12 @@ def cli():
 @cli.command()
 @click.option("--input", "input_path", required=True, help="Path to ads CSV")
 @click.option("--out", "output_dir", default="output", help="Output directory")
-@click.option("--mode", type=click.Choice(["live", "dry"]), default="dry", help="live = call API; dry = mock")
+@click.option(
+    "--mode",
+    type=click.Choice(["live", "dry"]),
+    default="dry",
+    help="live = call API; dry = mock",
+)
 @click.option("--config", "config_path", default="config.yaml", help="Config file path")
 def run(input_path: str, output_dir: str, mode: str, config_path: str):
     """Run the full ad variation pipeline."""
@@ -51,7 +60,9 @@ def run(input_path: str, output_dir: str, mode: str, config_path: str):
     else:
         click.echo("🚀 LIVE mode — using Anthropic API")
         click.echo(f"   Budget: max_calls_per_run={cfg.budget.max_calls_per_run}")
-        click.echo(f"   Cache:  {'enabled' if cfg.cache.enabled else 'disabled'} → {cfg.cache.path}")
+        click.echo(
+            f"   Cache:  {'enabled' if cfg.cache.enabled else 'disabled'} → {cfg.cache.path}"
+        )
 
     provider = _get_provider(cfg, mode)
 
@@ -78,17 +89,23 @@ def run(input_path: str, output_dir: str, mode: str, config_path: str):
     if pstats:
         click.echo("")
         click.echo("📊 LLM Stats:")
-        click.echo(f"   API calls: {pstats.get('call_count', 0)}  |  Retries: {pstats.get('retry_count', 0)}")
-        click.echo(f"   Tokens:    {pstats.get('total_tokens', 0):,}  "
-                   f"(in: {pstats.get('total_input_tokens', 0):,}  "
-                   f"out: {pstats.get('total_output_tokens', 0):,})")
+        click.echo(
+            f"   API calls: {pstats.get('call_count', 0)}  |  Retries: {pstats.get('retry_count', 0)}"
+        )
+        click.echo(
+            f"   Tokens:    {pstats.get('total_tokens', 0):,}  "
+            f"(in: {pstats.get('total_input_tokens', 0):,}  "
+            f"out: {pstats.get('total_output_tokens', 0):,})"
+        )
         if pstats.get("last_error"):
             click.echo(f"   Last error: {pstats['last_error']}", err=True)
     if cstats:
         hit_pct = f"{cstats.get('hit_rate', 0) * 100:.1f}%"
-        click.echo(f"   Cache:     hits={cstats.get('hits', 0)}  "
-                   f"misses={cstats.get('misses', 0)}  "
-                   f"hit_rate={hit_pct}")
+        click.echo(
+            f"   Cache:     hits={cstats.get('hits', 0)}  "
+            f"misses={cstats.get('misses', 0)}  "
+            f"hit_rate={hit_pct}"
+        )
 
 
 @cli.command("ingest-results")
@@ -130,7 +147,9 @@ def sheets_push(spreadsheet_id: str, worksheet: str, input_path: str):
     except Exception as exc:
         raise click.ClickException(f"Failed to push to Google Sheets: {exc}")
 
-    click.echo(f"✅ Pushed {n} rows to worksheet '{worksheet}' in spreadsheet {spreadsheet_id}.")
+    click.echo(
+        f"✅ Pushed {n} rows to worksheet '{worksheet}' in spreadsheet {spreadsheet_id}."
+    )
 
 
 @cli.group("google-ads")
@@ -141,11 +160,30 @@ def google_ads_group():
 
 @google_ads_group.command("pull")
 @click.option("--customer_id", required=True, help="Google Ads customer ID")
-@click.option("--date_range", default="LAST_30_DAYS", show_default=True, help="Google Ads date range")
+@click.option(
+    "--date_range",
+    default="LAST_30_DAYS",
+    show_default=True,
+    help="Google Ads date range",
+)
 @click.option("--level", default="ad", show_default=True, type=click.Choice(["ad"]))
-@click.option("--out", "out_path", default="input/ads.csv", show_default=True, help="Output CSV path")
-@click.option("--config", "config_path", default=None, help="Optional google-ads.yaml path")
-def google_ads_pull(customer_id: str, date_range: str, level: str, out_path: str, config_path: str | None):
+@click.option(
+    "--out",
+    "out_path",
+    default="input/ads.csv",
+    show_default=True,
+    help="Output CSV path",
+)
+@click.option(
+    "--config", "config_path", default=None, help="Optional google-ads.yaml path"
+)
+def google_ads_pull(
+    customer_id: str,
+    date_range: str,
+    level: str,
+    out_path: str,
+    config_path: str | None,
+):
     """Pull Google Ads performance into unified AdsRow CSV."""
     try:
         rows = pull_google_ads_rows(
@@ -170,8 +208,16 @@ def meta_ads_group():
 
 
 @meta_ads_group.command("pull")
-@click.option("--date_preset", default="last_30d", show_default=True, help="Meta date preset")
-@click.option("--out", "out_path", default="input/ads.csv", show_default=True, help="Output CSV path")
+@click.option(
+    "--date_preset", default="last_30d", show_default=True, help="Meta date preset"
+)
+@click.option(
+    "--out",
+    "out_path",
+    default="input/ads.csv",
+    show_default=True,
+    help="Output CSV path",
+)
 def meta_ads_pull(date_preset: str, out_path: str):
     """Pull Meta Ads insights into unified AdsRow CSV."""
     try:

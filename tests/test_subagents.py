@@ -1,4 +1,5 @@
 """Tests for brand voice + compliance subagents."""
+
 from __future__ import annotations
 
 import json
@@ -7,8 +8,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from gcf.compliance_agent import filter_risky_claims
 from gcf.brand_voice_agent import _parse_brand_voice_json
+from gcf.compliance_agent import filter_risky_claims
 
 
 class TestComplianceAgent:
@@ -33,10 +34,12 @@ class TestComplianceAgent:
 
 class TestBrandVoiceParser:
     def test_parses_brand_voice_json(self):
-        raw = json.dumps({
-            "guideline": "Keep tone clear and practical.",
-            "examples": ["Save time today.", "Try now for value."],
-        })
+        raw = json.dumps(
+            {
+                "guideline": "Keep tone clear and practical.",
+                "examples": ["Save time today.", "Try now for value."],
+            }
+        )
         out = _parse_brand_voice_json(raw)
         assert "Guideline:" in out
         assert "Examples:" in out

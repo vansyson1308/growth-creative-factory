@@ -1,4 +1,5 @@
 """Anthropic (Claude) provider with retry/backoff and budget tracking."""
+
 from __future__ import annotations
 
 import os
@@ -9,9 +10,8 @@ from typing import Optional
 import anthropic
 from dotenv import load_dotenv
 
+from gcf.config import BudgetConfig, RetryConfig
 from gcf.providers.base import BaseProvider
-from gcf.config import RetryConfig, BudgetConfig
-
 
 # HTTP status codes that warrant an automatic retry
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504, 529}
@@ -162,4 +162,4 @@ class AnthropicProvider(BaseProvider):
         base = self._retry_cfg.backoff_base_seconds
         cap = self._retry_cfg.backoff_max_seconds
         jitter = random.uniform(0.0, 1.0)
-        return min(base * (2 ** attempt) + jitter, cap)
+        return min(base * (2**attempt) + jitter, cap)

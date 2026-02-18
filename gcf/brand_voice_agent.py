@@ -3,6 +3,7 @@
 Builds a short style guideline from brand rules and returns it for prompt injection.
 In dry mode this agent should be skipped by the pipeline.
 """
+
 from __future__ import annotations
 
 import json
@@ -72,9 +73,6 @@ def generate_brand_voice_guideline(
 
     raw = provider.generate(
         prompt,
-        system=(
-            "You are a brand strategist for ad copy. "
-            "Return ONLY valid JSON."
-        ),
+        system=("You are a brand strategist for ad copy. " "Return ONLY valid JSON."),
     )
     return _parse_brand_voice_json(raw)

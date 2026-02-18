@@ -1,13 +1,18 @@
 """Google Ads connector: pull performance rows into unified AdsRow schema."""
+
 from __future__ import annotations
 
 import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
-from gcf.config_google_ads import GoogleAdsConfig, GoogleAdsConfigError, load_google_ads_config
+from gcf.config_google_ads import (
+    GoogleAdsConfig,
+    GoogleAdsConfigError,
+    load_google_ads_config,
+)
 from gcf.mappers import adsrows_to_dataframe
 from gcf.schema import AdsRow
 
@@ -62,7 +67,9 @@ def _safe_int(v, default: int = 0) -> int:
 def map_google_ads_row(row) -> AdsRow:
     campaign = getattr(getattr(row, "campaign", None), "name", "") or ""
     ad_group = getattr(getattr(row, "ad_group", None), "name", "") or ""
-    ad_id = str(getattr(getattr(getattr(row, "ad_group_ad", None), "ad", None), "id", "") or "")
+    ad_id = str(
+        getattr(getattr(getattr(row, "ad_group_ad", None), "ad", None), "id", "") or ""
+    )
 
     metrics = getattr(row, "metrics", None)
     segments = getattr(row, "segments", None)
@@ -125,7 +132,10 @@ WHERE segments.date DURING {date_range}
 
 def _is_retryable_error(exc: Exception) -> bool:
     s = str(exc).lower()
-    return any(k in s for k in ["rate", "quota", "resource exhausted", "429", "too many requests"])
+    return any(
+        k in s
+        for k in ["rate", "quota", "resource exhausted", "429", "too many requests"]
+    )
 
 
 def _search_with_retry(service, customer_id: str, query: str, retry: RetryPolicy):
@@ -136,7 +146,9 @@ def _search_with_retry(service, customer_id: str, query: str, retry: RetryPolicy
         except Exception as exc:
             if attempt >= retry.max_retries or not _is_retryable_error(exc):
                 raise
-            sleep_s = min(retry.backoff_base_seconds * (2 ** attempt), retry.backoff_max_seconds)
+            sleep_s = min(
+                retry.backoff_base_seconds * (2**attempt), retry.backoff_max_seconds
+            )
             sleep_s += random.uniform(0, retry.jitter_seconds)
             time.sleep(sleep_s)
             attempt += 1
@@ -165,7 +177,9 @@ def pull_google_ads_rows(
         raise
     except Exception as exc:
         msg = str(exc)
-        if any(k in msg.lower() for k in ["permission", "unauthorized", "authentication"]):
+        if any(
+            k in msg.lower() for k in ["permission", "unauthorized", "authentication"]
+        ):
             raise GoogleAdsConnectorError(
                 "Google Ads authentication/permission error. Verify developer token, OAuth creds, "
                 "refresh token, and account access. See docs/CONNECT_GOOGLE_ADS.md"

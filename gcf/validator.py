@@ -1,4 +1,5 @@
 """Validate ad copy against character limits and policy rules."""
+
 from __future__ import annotations
 
 import re

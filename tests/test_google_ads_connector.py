@@ -1,4 +1,5 @@
 """Tests for Google Ads connector mapping/metrics with mocked client."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -40,8 +41,12 @@ def test_pull_google_ads_rows_with_mock_client(tmp_path):
 
     with patch("gcf.connectors.google_ads.load_google_ads_config") as mock_cfg:
         mock_cfg.return_value = SimpleNamespace(
-            developer_token="d", client_id="id", client_secret="sec",
-            refresh_token="rt", customer_id="123", login_customer_id=None,
+            developer_token="d",
+            client_id="id",
+            client_secret="sec",
+            refresh_token="rt",
+            customer_id="123",
+            login_customer_id=None,
         )
         rows = pull_google_ads_rows(
             customer_id="123",

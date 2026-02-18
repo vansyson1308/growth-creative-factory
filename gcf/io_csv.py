@@ -1,12 +1,17 @@
 """CSV / TSV read-write helpers."""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 import pandas as pd
 
-from gcf.mappers import REQUIRED_INPUT_COLUMNS, adsrows_to_dataframe, map_dataframe_to_adsrows
+from gcf.mappers import (
+    REQUIRED_INPUT_COLUMNS,
+    adsrows_to_dataframe,
+    map_dataframe_to_adsrows,
+)
 
 
 class InputSchemaError(ValueError):
@@ -14,7 +19,17 @@ class InputSchemaError(ValueError):
 
 
 def _normalize_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
-    numeric_cols = ["impressions", "clicks", "spend", "cost", "conversions", "revenue", "ctr", "cpa", "roas"]
+    numeric_cols = [
+        "impressions",
+        "clicks",
+        "spend",
+        "cost",
+        "conversions",
+        "revenue",
+        "ctr",
+        "cpa",
+        "roas",
+    ]
     out = df.copy()
     for col in numeric_cols:
         if col not in out.columns:

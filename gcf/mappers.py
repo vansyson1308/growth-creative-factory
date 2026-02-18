@@ -1,4 +1,5 @@
 """Mapping utilities between external tabular data and internal AdsRow schema."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
@@ -56,7 +57,11 @@ def map_record_to_adsrow(record: Dict[str, Any]) -> AdsRow:
         platform=_normalize_platform(record.get("platform")),
         headline=str(record.get("headline", "") or ""),
         description=str(record.get("description", "") or ""),
-        final_url=(str(record.get("final_url")).strip() if record.get("final_url") not in (None, "") else None),
+        final_url=(
+            str(record.get("final_url")).strip()
+            if record.get("final_url") not in (None, "")
+            else None
+        ),
         impressions=_to_int(record.get("impressions", 0)),
         clicks=_to_int(record.get("clicks", 0)),
         spend=_to_float(metric_map["spend"]),
@@ -65,16 +70,39 @@ def map_record_to_adsrow(record: Dict[str, Any]) -> AdsRow:
         ctr=_to_float(record.get("ctr", 0)),
         cpa=_to_float(record.get("cpa", 0)),
         roas=_to_float(record.get("roas", 0)),
-        date_start=(str(record.get("date_start")).strip() if record.get("date_start") not in (None, "") else None),
-        date_end=(str(record.get("date_end")).strip() if record.get("date_end") not in (None, "") else None),
+        date_start=(
+            str(record.get("date_start")).strip()
+            if record.get("date_start") not in (None, "")
+            else None
+        ),
+        date_end=(
+            str(record.get("date_end")).strip()
+            if record.get("date_end") not in (None, "")
+            else None
+        ),
         extra={
             k: v
             for k, v in record.items()
             if k
             not in {
-                "campaign", "ad_group", "ad_id", "platform", "headline", "description", "final_url",
-                "impressions", "clicks", "spend", "cost", "conversions", "revenue", "ctr", "cpa", "roas",
-                "date_start", "date_end",
+                "campaign",
+                "ad_group",
+                "ad_id",
+                "platform",
+                "headline",
+                "description",
+                "final_url",
+                "impressions",
+                "clicks",
+                "spend",
+                "cost",
+                "conversions",
+                "revenue",
+                "ctr",
+                "cpa",
+                "roas",
+                "date_start",
+                "date_end",
             }
         },
     )

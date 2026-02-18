@@ -1,4 +1,5 @@
 """Main pipeline — orchestrates selector → headline → description → checker → output."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -6,24 +7,25 @@ from itertools import product as itertools_product
 from pathlib import Path
 from typing import Dict, List
 
-import pandas as pd
-
+from gcf.brand_voice_agent import generate_brand_voice_guideline
+from gcf.checker import check_copy
+from gcf.compliance_agent import filter_risky_claims
 from gcf.config import AppConfig
+from gcf.generator_description import (
+    generate_description_replacements,
+    generate_descriptions,
+)
+from gcf.generator_headline import generate_headline_replacements, generate_headlines
 from gcf.io_csv import (
     read_ads_csv,
     write_figma_tsv,
-    write_new_ads_csv,
     write_handoff_csv,
+    write_new_ads_csv,
     write_report,
 )
-from gcf.selector import select_underperforming, generate_strategy
-from gcf.generator_headline import generate_headlines, generate_headline_replacements
-from gcf.generator_description import generate_descriptions, generate_description_replacements
-from gcf.checker import check_copy
-from gcf.brand_voice_agent import generate_brand_voice_guideline
-from gcf.compliance_agent import filter_risky_claims
 from gcf.memory import append_entry, load_memory
 from gcf.providers.base import BaseProvider
+from gcf.selector import generate_strategy, select_underperforming
 
 
 def _build_memory_context(cfg: AppConfig, campaign: str) -> str:
@@ -47,6 +49,7 @@ def _make_cache_store(cfg: AppConfig, mode: str):
         return None
     try:
         from gcf.cache import CacheStore
+
         return CacheStore(cfg.cache.path)
     except Exception:
         return None
@@ -158,13 +161,20 @@ def run_pipeline(
                 if vtype == "HEADLINE" and 0 <= idx < len(headlines):
                     headline_failures.append({"text": headlines[idx], "reason": issue})
                 elif vtype == "DESCRIPTION" and 0 <= idx < len(descriptions):
-                    description_failures.append({"text": descriptions[idx], "reason": issue})
+                    description_failures.append(
+                        {"text": descriptions[idx], "reason": issue}
+                    )
 
             if headline_failures:
                 bad_texts = {f["text"] for f in headline_failures}
                 headlines = [h for h in headlines if h not in bad_texts]
                 replacements = generate_headline_replacements(
-                    provider, ad, strategy, cfg, headline_failures, len(headline_failures)
+                    provider,
+                    ad,
+                    strategy,
+                    cfg,
+                    headline_failures,
+                    len(headline_failures),
                 )
                 headlines = headlines + [h for h in replacements if h not in headlines]
 
@@ -172,9 +182,16 @@ def run_pipeline(
                 bad_texts = {f["text"] for f in description_failures}
                 descriptions = [d for d in descriptions if d not in bad_texts]
                 replacements = generate_description_replacements(
-                    provider, ad, strategy, cfg, description_failures, len(description_failures)
+                    provider,
+                    ad,
+                    strategy,
+                    cfg,
+                    description_failures,
+                    len(description_failures),
                 )
-                descriptions = descriptions + [d for d in replacements if d not in descriptions]
+                descriptions = descriptions + [
+                    d for d in replacements if d not in descriptions
+                ]
 
             headlines, descriptions, violations = check_copy(
                 provider, headlines, descriptions, cfg
@@ -195,24 +212,40 @@ def run_pipeline(
 
                 headline_failures = [
                     {"text": f["text"], "reason": f.get("reason", "risky claim")}
-                    for f in compliance_failures if f.get("type") == "HEADLINE"
+                    for f in compliance_failures
+                    if f.get("type") == "HEADLINE"
                 ]
                 description_failures = [
                     {"text": f["text"], "reason": f.get("reason", "risky claim")}
-                    for f in compliance_failures if f.get("type") == "DESCRIPTION"
+                    for f in compliance_failures
+                    if f.get("type") == "DESCRIPTION"
                 ]
 
                 if headline_failures:
                     replacements = generate_headline_replacements(
-                        provider, ad, strategy, cfg, headline_failures, len(headline_failures)
+                        provider,
+                        ad,
+                        strategy,
+                        cfg,
+                        headline_failures,
+                        len(headline_failures),
                     )
-                    headlines = headlines + [h for h in replacements if h not in headlines]
+                    headlines = headlines + [
+                        h for h in replacements if h not in headlines
+                    ]
 
                 if description_failures:
                     replacements = generate_description_replacements(
-                        provider, ad, strategy, cfg, description_failures, len(description_failures)
+                        provider,
+                        ad,
+                        strategy,
+                        cfg,
+                        description_failures,
+                        len(description_failures),
                     )
-                    descriptions = descriptions + [d for d in replacements if d not in descriptions]
+                    descriptions = descriptions + [
+                        d for d in replacements if d not in descriptions
+                    ]
 
             total_compliance_failures += ad_compliance_failures
 
@@ -233,17 +266,19 @@ def run_pipeline(
 
         for ci, (h, d) in enumerate(combos):
             tag = f"V{ci+1:03d}"
-            new_ads_rows.append({
-                "campaign": ad.get("campaign", ""),
-                "ad_group": ad.get("ad_group", ""),
-                "ad_id": ad.get("ad_id", ""),
-                "original_headline": ad.get("headline", ""),
-                "original_description": ad.get("description", ""),
-                "variant_headline": h,
-                "variant_description": d,
-                "variant_set_id": variant_set_id,
-                "tag": tag,
-            })
+            new_ads_rows.append(
+                {
+                    "campaign": ad.get("campaign", ""),
+                    "ad_group": ad.get("ad_group", ""),
+                    "ad_id": ad.get("ad_id", ""),
+                    "original_headline": ad.get("headline", ""),
+                    "original_description": ad.get("description", ""),
+                    "variant_headline": h,
+                    "variant_description": d,
+                    "variant_set_id": variant_set_id,
+                    "tag": tag,
+                }
+            )
             figma_rows.append({"H1": h, "DESC": d, "TAG": tag})
 
         # Memory log
@@ -258,19 +293,21 @@ def run_pipeline(
             notes=f"mode={mode}",
         )
 
-        report_details.append({
-            "ad_id": ad.get("ad_id", ""),
-            "campaign": ad.get("campaign", ""),
-            "issue": ad["_issue"],
-            "analysis": analysis,
-            "strategy": strategy,
-            "headlines_generated": h_count,
-            "descriptions_generated": d_count,
-            "checker_violations": len(violations),
-            "compliance_failures": ad_compliance_failures,
-            "combos": len(combos),
-            "variant_set_id": variant_set_id,
-        })
+        report_details.append(
+            {
+                "ad_id": ad.get("ad_id", ""),
+                "campaign": ad.get("campaign", ""),
+                "issue": ad["_issue"],
+                "analysis": analysis,
+                "strategy": strategy,
+                "headlines_generated": h_count,
+                "descriptions_generated": d_count,
+                "checker_violations": len(violations),
+                "compliance_failures": ad_compliance_failures,
+                "combos": len(combos),
+                "variant_set_id": variant_set_id,
+            }
+        )
 
     # 4. Write outputs
     write_new_ads_csv(new_ads_rows, output_dir / "new_ads.csv")
@@ -368,7 +405,9 @@ def _format_report(summary: Dict, details: List[Dict]) -> str:
         lines.append(f"- **Headlines generated:** {d['headlines_generated']}")
         lines.append(f"- **Descriptions generated:** {d['descriptions_generated']}")
         lines.append(f"- **Checker violations removed:** {d['checker_violations']}")
-        lines.append(f"- **Compliance failures filtered:** {d.get('compliance_failures', 0)}")
+        lines.append(
+            f"- **Compliance failures filtered:** {d.get('compliance_failures', 0)}"
+        )
         lines.append(f"- **Combinations:** {d['combos']}")
         lines.append(f"- **Variant set ID:** `{d['variant_set_id']}`")
         lines.append("")
