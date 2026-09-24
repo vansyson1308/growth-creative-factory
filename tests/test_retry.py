@@ -228,6 +228,7 @@ class TestStats:
         expected = {
             "call_count",
             "retry_count",
+            "refusal_count",
             "total_input_tokens",
             "total_output_tokens",
             "total_tokens",
@@ -252,3 +253,74 @@ class TestStats:
         assert s["call_count"] == 2
         assert s["total_input_tokens"] == 200
         assert s["total_output_tokens"] == 100
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Current-model behaviour (thinking blocks, refusals, sampling params)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _block(kind: str, text: str = ""):
+    b = MagicMock()
+    b.type = kind
+    b.text = text
+    return b
+
+
+class TestCurrentModels:
+    def test_skips_thinking_blocks(self):
+        p = _make_provider()
+        msg = _make_success()
+        msg.content = [_block("thinking"), _block("text", '{"headlines": []}')]
+        p.client.messages.create.return_value = msg
+        assert p.generate("p") == '{"headlines": []}'
+
+    def test_refusal_returns_empty_and_is_counted(self):
+        p = _make_provider()
+        msg = _make_success()
+        msg.stop_reason = "refusal"
+        msg.stop_details = MagicMock(category="cyber")
+        p.client.messages.create.return_value = msg
+        assert p.generate("p") == ""
+        assert p.stats()["refusal_count"] == 1
+        assert "refusal" in p.stats()["last_error"]
+
+    def test_temperature_omitted_by_default(self):
+        p = _make_provider()
+        p.client.messages.create.return_value = _make_success()
+        p.generate("p")
+        _, kwargs = p.client.messages.create.call_args
+        assert "temperature" not in kwargs
+
+    def test_effort_is_sent_in_output_config(self):
+        p = _make_provider()
+        p.effort = "low"
+        p.client.messages.create.return_value = _make_success()
+        p.generate("p")
+        _, kwargs = p.client.messages.create.call_args
+        assert kwargs["output_config"] == {"effort": "low"}
+
+    def test_fallbacks_use_beta_endpoint(self):
+        p = _make_provider()
+        p.fallbacks = "default"
+        p.client.beta.messages.create.return_value = _make_success("ok")
+        assert p.generate("p") == "ok"
+        _, kwargs = p.client.beta.messages.create.call_args
+        assert kwargs["fallbacks"] == "default"
+        assert kwargs["betas"] == ["server-side-fallback-2026-07-01"]
+        p.client.messages.create.assert_not_called()
+
+    def test_rejected_temperature_is_dropped_and_retried(self):
+        p = _make_provider()
+        p.temperature = 0.8
+        err = anthropic.BadRequestError.__new__(anthropic.BadRequestError)
+        err.status_code = 400
+        err.message = "temperature is not supported for this model"
+        err.response = MagicMock()
+        err.args = (err.message,)
+        p.client.messages.create.side_effect = [err, _make_success("fine")]
+        assert p.generate("p") == "fine"
+        assert p.temperature is None
+        _, kwargs = p.client.messages.create.call_args
+        assert "temperature" not in kwargs
+        assert p.call_count == 1

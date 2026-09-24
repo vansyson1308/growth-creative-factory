@@ -28,16 +28,25 @@ ANGLE_BUCKETS: List[str] = [
 ]
 
 _ANGLE_PATTERNS = {
-    "urgency": [r"\b(now|today|limited|ending|deadline|hurry|ngay|hom nay|co han)\b"],
+    "urgency": [
+        r"\b(now|today|tonight|limited|ending|ends|deadline|hurry|last call|"
+        r"ngay|hom nay|hôm nay|co han|có hạn|sắp kết thúc|cuối cùng)\b"
+    ],
     "social_proof": [
-        r"\b(\d+k|\d+\+|customers|users|trusted|review|đánh giá|khach hang)\b"
+        r"(\b\d+k\b|\d+\+|\bcustomers?\b|\busers\b|\btrusted\b|\breviews?\b|"
+        r"\brated\b|đánh giá|khach hang|khách hàng|tin chọn)"
     ],
     "problem_solution": [
-        r"\b(problem|pain|issue|fix|solve|solution|giai phap|khac phuc)\b"
+        r"\b(problem|pain|issue|issues|fix|solve|solved|solution|"
+        r"giai phap|giải pháp|khac phuc|khắc phục|hết lo)\b"
     ],
-    "curiosity": [r"\b(discover|secret|why|what if|bi mat|kham pha|tai sao)\b"],
+    "curiosity": [
+        r"\b(discover|secret|why|what if|bi mat|bí mật|kham pha|khám phá|"
+        r"tai sao|tại sao|vì sao)\b"
+    ],
     "benefit": [
-        r"\b(save|better|easy|faster|value|benefit|tiet kiem|de dang|hieu qua)\b"
+        r"\b(save|better|easy|faster|value|benefit|tiet kiem|tiết kiệm|"
+        r"de dang|dễ dàng|hieu qua|hiệu quả)\b"
     ],
 }
 

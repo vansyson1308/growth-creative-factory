@@ -238,10 +238,27 @@ class TestCheckCopy:
         h = ["Headline"]
         d = ["Desc. Mua ngay!"]
         ch, de, viol = check_copy(provider, h, d, cfg)
-        # Nothing removed (unrecognised type)
+        # Nothing removed (unrecognised type) and nothing actionable reported,
+        # so the pipeline does not burn retries on it.
         assert ch == h
         assert de == d
+        assert viol == []
+
+    def test_out_of_range_index_ignored_and_text_is_canonical(self):
+        viol_data = {
+            "violations": [
+                {"type": "HEADLINE", "index": 9, "issue": "hallucinated"},
+                {"type": "headline", "index": "1", "text": "wrong", "issue": "caps"},
+            ]
+        }
+        provider = _make_provider(json.dumps(viol_data))
+        ch, de, viol = check_copy(
+            provider, ["Keep", "DROP"], ["D. Mua ngay!"], _FakeCfg()
+        )
+        assert ch == ["Keep"]
         assert len(viol) == 1
+        assert viol[0]["text"] == "DROP"
+        assert viol[0]["index"] == 1
 
     def test_violation_without_index_ignored(self):
         """Violations missing 'index' key should be silently skipped."""

@@ -1,11 +1,19 @@
-"""Mock provider for dry-run mode — no API calls, strict JSON responses."""
+"""Mock provider for dry-run mode — no API calls, strict JSON responses.
+
+Copy is produced by :mod:`gcf.copywriter`, an offline template engine that
+reads the product and language from the prompt, so dry runs yield realistic,
+on-topic, policy-safe copy instead of placeholder text.
+"""
 
 from __future__ import annotations
 
 import json
 import random
-from typing import List
+import re
+import zlib
+from typing import List, Optional
 
+from gcf import copywriter
 from gcf.providers.base import BaseProvider
 
 # Pools of realistic mock outputs
@@ -43,12 +51,17 @@ _DESC_POOL = [
 def _detect_prompt_type(prompt: str) -> str:
     """Detect which agent type this prompt is intended for.
 
-    Returns one of: 'selector', 'brand_voice', 'headline', 'description', 'checker', 'unknown'.
+    Returns one of: 'posts', 'selector', 'brand_voice', 'headline', 'description',
+    'checker', 'unknown'.
     Uses the first 5 lines (TASK / role declaration) to avoid false positives
     from context fields like 'original_headline' or 'current description'.
     """
     first_lines = "\n".join(prompt.splitlines()[:5]).lower()
     full_lower = prompt.lower()
+
+    # Social post writer (brief → posts)
+    if "social post writer" in first_lines:
+        return "posts"
 
     # Checker: reviews existing copy for violations
     if "compliance reviewer" in full_lower or "violations" in first_lines:
@@ -88,11 +101,48 @@ def _detect_prompt_type(prompt: str) -> str:
     return "unknown"
 
 
-class MockProvider(BaseProvider):
-    """Deterministic-ish mock that returns strict JSON responses.
+def _field(prompt: str, label: str) -> str:
+    m = re.search(rf"(?im)^\s*-?\s*{label}\s*:\s*(.+)$", prompt)
+    return m.group(1).strip() if m else ""
 
-    All four agent types (selector, headline, description, checker) return
-    valid JSON so that the real parsers can be exercised in dry-run mode.
+
+def _int(prompt: str, pattern: str, default: int) -> int:
+    m = re.search(pattern, prompt, flags=re.IGNORECASE)
+    try:
+        return int(m.group(1)) if m else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _product_from_prompt(prompt: str) -> str:
+    campaign = _field(prompt, "Campaign")
+    return copywriter.extract_product(
+        _field(prompt, "Current headline"),
+        campaign.split("/")[0] if campaign else "",
+        campaign,
+    )
+
+
+def _language_from_prompt(prompt: str) -> Optional[str]:
+    sample = " ".join(
+        [
+            _field(prompt, "Current headline"),
+            _field(prompt, "Current description"),
+            _field(prompt, "Campaign"),
+        ]
+    )
+    if not sample.strip():
+        # Retry prompts quote the failed copy — use that as the language hint
+        sample = " ".join(re.findall(r"^- '(.+?)':", prompt, flags=re.MULTILINE))
+    return copywriter.detect_language(sample) if sample.strip() else None
+
+
+class MockProvider(BaseProvider):
+    """Deterministic offline provider that returns strict JSON responses.
+
+    All agent types (selector, brand voice, headline, description, checker,
+    posts) return valid JSON so that the real parsers are exercised in dry-run
+    mode.
     """
 
     def __init__(self, seed: int = 42, **kwargs):
@@ -104,51 +154,66 @@ class MockProvider(BaseProvider):
         """
         if not isinstance(seed, int):
             seed = 42
+        self._seed = seed
         self._rng = random.Random(seed)
         # Track the call sequence for test assertions
         self._call_log: List[str] = []
+
+    def _seed_for(self, prompt: str) -> int:
+        return (
+            self._seed * 1_000_003 + zlib.crc32(prompt.encode("utf-8"))
+        ) & 0x7FFFFFFF
 
     def generate(self, prompt: str, system: str = "", max_tokens: int = 2048) -> str:
         """Detect prompt type and return valid JSON mock response."""
         ptype = _detect_prompt_type(prompt)
         self._call_log.append(ptype)
 
+        if ptype == "posts":
+            return self._mock_posts(prompt)
         if ptype == "selector":
             return self._mock_strategy(prompt)
         elif ptype == "brand_voice":
             return self._mock_brand_voice()
         elif ptype == "headline":
-            return self._mock_headlines()
+            return self._mock_headlines(prompt=prompt)
         elif ptype == "description":
-            return self._mock_descriptions()
+            return self._mock_descriptions(prompt=prompt)
         elif ptype == "checker":
             return self._mock_checker()
         else:
             # Generic fallback — return headlines JSON so pipeline doesn't break
-            return self._mock_headlines()
+            return self._mock_headlines(prompt=prompt)
 
     # ── Mock response builders ────────────────────────────────────────────────
 
     def _mock_strategy(self, prompt: str = "") -> str:
-        """Return a selector-style strategy JSON."""
-        # Try to extract ad_id from prompt for a realistic response
-        ad_id = "mock_ad"
-        for line in prompt.splitlines():
-            if "ad_id" in line.lower() or "ad id" in line.lower():
-                parts = line.split(":")
-                if len(parts) > 1:
-                    ad_id = parts[-1].strip().strip('"').strip()
-                    break
-        return json.dumps(
-            {
-                "ad_id": ad_id,
-                "analysis": (
-                    "CTR is below threshold likely due to generic headline copy "
-                    "that does not differentiate from competitor ads."
-                ),
-                "strategy": "Test urgency + price-anchor angle to drive immediate clicks",
-            }
+        """Return a selector-style strategy JSON grounded in the ad's metrics."""
+        ad_id = _field(prompt, "AD ID") or "mock_ad"
+        issues = _field(prompt, "Issues detected").lower()
+        product = (
+            copywriter.extract_product(_field(prompt, "Current headline"))
+            or "the offer"
         )
+        if "ctr" in issues:
+            analysis = (
+                f"Low CTR suggests the headline for {product} blends in with "
+                "competitors and gives no concrete reason to click."
+            )
+            strategy = "Lead with a concrete benefit plus a time-bound hook"
+        elif "roas" in issues:
+            analysis = (
+                f"Clicks are not converting into revenue — the copy for {product} "
+                "attracts browsers rather than buyers."
+            )
+            strategy = "Qualify intent with social proof and a clear value anchor"
+        elif "cpa" in issues:
+            analysis = f"Acquisition cost is high; the {product} message lacks urgency."
+            strategy = "Add urgency and a problem-solution framing to lift conversion"
+        else:
+            analysis = f"Engagement on {product} is flat versus account benchmarks."
+            strategy = "Test curiosity and social-proof angles against the control"
+        return json.dumps({"ad_id": ad_id, "analysis": analysis, "strategy": strategy})
 
     def _mock_brand_voice(self) -> str:
         return json.dumps(
@@ -161,18 +226,63 @@ class MockProvider(BaseProvider):
             }
         )
 
-    def _mock_headlines(self, n: int = 10) -> str:
-        """Return a headlines JSON array."""
-        chosen = self._rng.sample(_HEADLINE_POOL, min(n, len(_HEADLINE_POOL)))
-        return json.dumps({"headlines": chosen})
+    def _mock_headlines(self, n: int = 10, prompt: str = "") -> str:
+        """Return a headlines JSON array written by the offline copywriter."""
+        n = _int(prompt, r"exactly\s+(\d+)\s+headline", 0) or _int(
+            prompt, r"provide\s+(\d+)\s+replacement", n
+        )
+        max_chars = _int(prompt, r"<=\s*(\d+)\s*char", 30)
+        product = _product_from_prompt(prompt)
+        lines = copywriter.write_headlines(
+            product,
+            n=n,
+            max_chars=max_chars,
+            language=_language_from_prompt(prompt),
+            seed=self._seed_for(prompt),
+        )
+        if not lines:
+            pool = list(_HEADLINE_POOL)
+            lines = self._rng.sample(pool, min(n, len(pool)))
+        return json.dumps({"headlines": lines}, ensure_ascii=False)
 
-    def _mock_descriptions(self, n: int = 6) -> str:
-        """Return a descriptions JSON array."""
-        chosen = self._rng.sample(_DESC_POOL, min(n, len(_DESC_POOL)))
-        return json.dumps({"descriptions": chosen})
+    def _mock_descriptions(self, n: int = 6, prompt: str = "") -> str:
+        """Return a descriptions JSON array written by the offline copywriter."""
+        n = _int(prompt, r"exactly\s+(\d+)\s+description", 0) or _int(
+            prompt, r"provide\s+(\d+)\s+replacement", n
+        )
+        max_chars = _int(prompt, r"<=\s*(\d+)\s*char", 90)
+        product = _product_from_prompt(prompt)
+        lines = copywriter.write_descriptions(
+            product,
+            n=n,
+            max_chars=max_chars,
+            language=_language_from_prompt(prompt),
+            seed=self._seed_for(prompt),
+        )
+        if not lines:
+            pool = list(_DESC_POOL)
+            lines = self._rng.sample(pool, min(n, len(pool)))
+        return json.dumps({"descriptions": lines}, ensure_ascii=False)
+
+    def _mock_posts(self, prompt: str) -> str:
+        m = re.search(r"(?m)^BRIEF_JSON:\s*(\{.*\})\s*$", prompt)
+        data = {}
+        if m:
+            try:
+                data = json.loads(m.group(1))
+            except json.JSONDecodeError:
+                data = {}
+        n = int(data.pop("n", 0) or _int(prompt, r"exactly\s+(\d+)\s+post", 6))
+        allowed = set(copywriter.Brief.__dataclass_fields__)
+        brief = copywriter.Brief(
+            **{k: v for k, v in data.items() if k in allowed and v not in (None, "")}
+            or {"product": ""}
+        )
+        posts = copywriter.write_posts(brief, n=n, seed=self._seed_for(prompt))
+        return json.dumps({"posts": [p.to_dict() for p in posts]}, ensure_ascii=False)
 
     def _mock_checker(self) -> str:
-        """Return an empty violations list — mock copy is always compliant."""
+        """Return an empty violations list — offline copy is policy-safe."""
         return json.dumps({"violations": []})
 
     # ── Stats helper (mirrors AnthropicProvider interface) ────────────────────
