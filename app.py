@@ -836,7 +836,8 @@ def step4() -> None:
 
     # ── Figma SOP cheat-sheet ────────────────────────────────────────────────
     with st.expander("📐 How to use figma_variations.tsv in Figma"):
-        st.markdown("""
+        st.markdown(
+            """
 **Prerequisites:** Figma Desktop + Growth Creative Factory plugin.
 
 1. **Import plugin (once)** — Figma menu → Plugins → Development → Import plugin from manifest
@@ -856,7 +857,8 @@ def step4() -> None:
    each with H1 and DESC filled in.
 
 7. **Export PNGs** — Click **Export PNGs** in the plugin to download all frames at 2×.
-            """)
+            """
+        )
 
     st.divider()
 
@@ -1007,7 +1009,8 @@ def learning_board() -> None:
             )
 
             with st.expander("📖 How policy checking works"):
-                st.markdown("""
+                st.markdown(
+                    """
 The pipeline checks every generated headline and description against
 each blocked pattern using `re.search(pattern, text)`.
 
@@ -1016,7 +1019,8 @@ each blocked pattern using `re.search(pattern, text)`.
 - After retries are exhausted, the piece is dropped from the output.
 
 The fail count shown in Step 3 includes both char-limit failures and policy violations.
-                    """)
+                    """
+                )
 
     # ── Tab 3 : Recent Experiments ───────────────────────────────────────────
     with tab_recent:

@@ -47,13 +47,15 @@ class CacheStore:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS llm_cache (
                     key        TEXT PRIMARY KEY,
                     value      TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (datetime('now'))
                 )
-            """)
+            """
+            )
             conn.commit()
 
     def _connect(self) -> sqlite3.Connection:
