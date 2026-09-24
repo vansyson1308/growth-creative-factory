@@ -36,12 +36,12 @@ dedupe:
 # Policy filter — regex patterns to reject
 policy:
   blocked_patterns:
-    - "(?i)cam kết"
-    - "(?i)tuyệt đối"
+    - "(?i)cam\\s*k[eế]t"
+    - "(?i)tuy[eệ]t\\s*[dđ][oố]i"
     - "(?i)\\bno\\.?\\s*1\\b"
     - "(?i)\\bbest\\b"
     - "(?i)\\bguarantee[d]?\\b"
-    - "(?i)\\b#1\\b"
+    - "(?i)(?<!\\w)#1\\b"
     - "(?i)100%"
 
 
@@ -59,9 +59,11 @@ brand_voice:
 # LLM provider
 provider:
   name: anthropic              # anthropic | mock
-  model: claude-sonnet-4-5-20250929
-  temperature: 0.8
+  model: claude-opus-5
   max_tokens: 2048
+  effort: low                  # low | medium | high | xhigh | max — short copy works well at low
+  fallbacks: default           # server-side refusal fallbacks (beta); set to null to disable
+  # temperature: 0.8           # only for older models — current models reject sampling params
 
 # Memory
 memory:
@@ -82,3 +84,16 @@ retry_api:
 cache:
   enabled: true                # set to false to disable entirely
   path: cache/llm_cache.db     # relative to working directory
+
+# Creative rendering — turn every variant into on-brand social images
+render:
+  enabled: true
+  formats: [square, portrait, story]   # square | portrait | story | landscape | wide
+  templates: []                        # empty = rotate: bold, editorial, split, glass, promo, photo
+  brand: aurora                        # preset (aurora|sunset|verde|tide|noir|blossom) or path/to/brand.yaml
+  max_creatives: 24                    # distinct variants rendered per run (0 = all)
+  image_format: png                    # png | jpg
+  workers: 0                           # 0 = auto (one per CPU core, max 8)
+  executor: auto                       # auto (processes for big batches) | process | thread
+  gallery: true                        # output/gallery.html review page
+  contact_sheet: true                  # output/contact_sheet.png overview

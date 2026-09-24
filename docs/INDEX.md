@@ -4,7 +4,9 @@ Use this index as the entry point for project documentation.
 
 ## Getting Started
 
-- [README](../README.md) — quickstart, workflow, and core usage.
+- [README](../README.md) — quickstart, showcase, workflow, and core usage.
+- [README (Tiếng Việt)](../README.vi.md)
+- [Creative Engine Reference](./CREATIVE_ENGINE.md) — templates, formats, brand kits, API.
 - [Contributing Guide](../CONTRIBUTING.md) — local setup, style, and PR expectations.
 - [Security Policy](../SECURITY.md) — responsible vulnerability disclosure.
 

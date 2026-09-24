@@ -1,0 +1,20 @@
+# Brand kit — copy this file, edit, then:  gcf create ... --brand path/to/brand_kit.yaml
+# Relative paths (logo, fonts) resolve against this file's folder.
+
+preset: aurora            # optional: start from a built-in preset, override below
+name: Acme Outdoor         # shown as the wordmark when no logo is given
+primary: "#0F766E"         # gradients, buttons
+secondary: "#155E75"       # gradient partner
+accent: "#F59E0B"          # badges, highlights, CTAs on dark
+dark: "#042F2E"            # dark canvases
+paper: "#F3F7F4"           # light canvases
+ink: "#0B2A26"             # text on light canvases
+handle: "@acmeoutdoor"     # small meta text on editorial layouts (optional)
+cta: ""                    # default CTA; empty = language-aware ("Shop now" / "Mua ngay")
+# logo: logo.png           # transparent PNG, shown on dark/colour backgrounds
+# logo_dark: logo-dark.png # optional variant for light backgrounds (mono logos auto-tint)
+# fonts:                   # any .ttf/.otf; roles: display, heading, body, serif
+#   display: fonts/MyBrand-Black.ttf
+#   body: fonts/MyBrand-Regular.ttf
+grain: 0.02                # film grain (0 = off)
+radius: 1.0                # corner roundness multiplier (0 = sharp)

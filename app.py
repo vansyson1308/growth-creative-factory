@@ -1,38 +1,47 @@
 """Streamlit app — Growth Creative Factory.
 
-Two top-level tabs:
-  🧙 Wizard      — 4-step flow: Upload → Select → Generate → Export
-  📊 Learning Board — top angles, blacklist phrases, recent experiments
+Top-level tabs:
+  🎨 Creative Studio — brief (or copy sheet) → on-brand images in every format
+  🧙 Ads Wizard      — 4-step flow: Upload → Select → Generate → Export (+ render)
+  📊 Learning Board  — top angles, blacklist phrases, recent experiments
+  🤝 Handoff / 🔌 Connectors — optional Google Sheets, Google Ads, Meta Ads
 """
 
 from __future__ import annotations
 
 import io
 import os
-from datetime import datetime, timezone
-from itertools import product as itertools_product
+import uuid
+import zipfile
 from pathlib import Path
 from typing import Dict, List
 
 import pandas as pd
 import streamlit as st
 
-from gcf.config import AppConfig, load_config
+from gcf.config import AppConfig, RenderConfig, load_config
 from gcf.connectors.google_ads import GoogleAdsConnectorError, pull_google_ads_rows
 from gcf.connectors.google_sheets import GoogleSheetsConfigError, push_tabular_file
 from gcf.connectors.meta_ads import MetaAdsConnectorError, pull_meta_ads_rows
-from gcf.generator_description import generate_descriptions
-from gcf.generator_headline import generate_headlines
+from gcf.copywriter import Brief
+from gcf.creative import FORMATS, PRESETS, TEMPLATES
 from gcf.io_csv import InputSchemaError, read_ads_csv
 from gcf.memory import (
-    append_entry,
     get_recent_experiments,
     get_top_angles,
     load_memory,
 )
-from gcf.pipeline import _format_report
+from gcf.pipeline import _format_report, _make_cache_store, generate_variants
+from gcf.providers import make_provider
 from gcf.providers.mock_provider import MockProvider
 from gcf.selector import select_underperforming
+from gcf.studio import (
+    creatives_from_file,
+    creatives_from_posts,
+    creatives_from_variants,
+    render_outputs,
+    write_posts_csv,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -42,9 +51,10 @@ STEP_LABELS: List[str] = [
     "1 · Upload & Config",
     "2 · Select Ads",
     "3 · Generate",
-    "4 · Export",
+    "4 · Export & Render",
 ]
 MAX_PREVIEW_ROWS = 20
+MAX_GALLERY_IMAGES = 24
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -87,17 +97,7 @@ def _resolve_provider(cfg: AppConfig, mode: str):
         return MockProvider(), "dry"
 
     try:
-        from gcf.providers.anthropic_provider import AnthropicProvider
-
-        pcfg = cfg.provider
-        return (
-            AnthropicProvider(
-                model=pcfg.model,
-                temperature=pcfg.temperature,
-                max_tokens=pcfg.max_tokens,
-            ),
-            "live",
-        )
+        return make_provider(cfg, "live"), "live"
     except Exception as exc:
         st.warning(
             f"⚠️ **Could not initialise Anthropic provider** (`{exc}`).  \n"
@@ -304,6 +304,7 @@ def step1() -> None:
                 "report_text",
                 "generation_approved",
                 "_cfg_draft",
+                "wizard_render",
             ]:
                 st.session_state.pop(key, None)
 
@@ -443,99 +444,180 @@ def _run_generation(
     cfg: AppConfig,
     mode: str,
 ) -> tuple:
-    """Run the generation loop; returns (new_ads_rows, figma_rows, summary, report_text)."""
+    """Run the shared pipeline agent chain; returns (rows, figma_rows, summary, report)."""
     provider, actual_mode = _resolve_provider(cfg, mode)
-    subset = df[df["ad_id"].isin(chosen_ids)].copy()
-    n = len(subset)
-
-    new_ads_rows: List[Dict] = []
-    figma_rows: List[Dict] = []
-    total_pass = total_fail = 0
-    report_details: List[Dict] = []
+    selected, reasons = select_underperforming(df, cfg.selector)
+    keep = selected["ad_id"].isin(chosen_ids)
+    subset = selected[keep].copy()
+    sub_reasons = [r for r, k in zip(reasons, keep.tolist()) if k]
+    # Ads added manually (not flagged by the rules) still get processed
+    extra = df[df["ad_id"].isin(chosen_ids) & ~df["ad_id"].isin(subset["ad_id"])]
+    if not extra.empty:
+        subset = pd.concat([subset, extra])
+        sub_reasons += [{"reasons": "selected manually"} for _ in range(len(extra))]
 
     progress = st.progress(0, text="⏳ Starting…")
-    status = st.empty()
 
-    for idx, (_, row) in enumerate(subset.iterrows()):
-        ad = row.to_dict()
-        ad["_issue"] = "selected via Wizard"
-        strategy = f"Improve engagement for ad {ad.get('ad_id', '')} — boost CTR/ROAS"
+    def on_progress(i: int, n: int, ad_id: str) -> None:
+        if n:
+            label = f"⏳ Ad {min(i + 1, n)}/{n} — {ad_id}" if i < n else "✅ Done"
+            progress.progress(min(1.0, i / n), text=label)
 
-        progress.progress(idx / n, text=f"⏳ Ad {idx + 1}/{n} — {ad.get('ad_id', '')}")
-        status.caption(
-            f"Generating headlines + descriptions for **{ad.get('ad_id', '')}**…"
-        )
-
-        headlines, h_fail = generate_headlines(provider, ad, strategy, cfg, "")
-        descriptions, d_fail = generate_descriptions(provider, ad, strategy, cfg, "")
-
-        total_pass += len(headlines) + len(descriptions)
-        total_fail += h_fail + d_fail
-
-        variant_set_id = (
-            f"vs_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{idx:03d}"
-        )
-        combos = list(itertools_product(headlines, descriptions))[
-            : cfg.generation.max_variants_per_run
-        ]
-
-        for ci, (h, d) in enumerate(combos):
-            tag = f"V{ci + 1:03d}"
-            new_ads_rows.append(
-                {
-                    "campaign": ad.get("campaign", ""),
-                    "ad_group": ad.get("ad_group", ""),
-                    "ad_id": ad.get("ad_id", ""),
-                    "original_headline": ad.get("headline", ""),
-                    "original_description": ad.get("description", ""),
-                    "variant_headline": h,
-                    "variant_description": d,
-                    "variant_set_id": variant_set_id,
-                    "tag": tag,
-                }
-            )
-            figma_rows.append({"H1": h, "DESC": d, "TAG": tag})
-
-        # ── Log to memory ────────────────────────────────────────────────────
-        try:
-            append_entry(
-                memory_path=cfg.memory.path,
-                campaign=ad.get("campaign", ""),
-                ad_group=ad.get("ad_group", ""),
-                ad_id=ad.get("ad_id", ""),
-                hypothesis=strategy,
-                variant_set_id=variant_set_id,
-                generated={"headlines": headlines, "descriptions": descriptions},
-                notes=f"mode={actual_mode}",
-            )
-        except Exception:
-            pass  # memory logging is non-critical; never block the wizard
-
-        report_details.append(
-            {
-                "ad_id": ad.get("ad_id", ""),
-                "campaign": ad.get("campaign", ""),
-                "issue": ad["_issue"],
-                "strategy": strategy,
-                "headlines_generated": len(headlines),
-                "descriptions_generated": len(descriptions),
-                "combos": len(combos),
-                "variant_set_id": variant_set_id,
-            }
-        )
-
+    result = generate_variants(
+        subset,
+        sub_reasons,
+        cfg,
+        provider,
+        actual_mode,
+        _make_cache_store(cfg, actual_mode),
+        on_progress,
+    )
     progress.progress(1.0, text="✅ Generation complete!")
-    status.empty()
+    if result.get("stopped_reason"):
+        st.warning(result["stopped_reason"], icon="⚠️")
 
     summary: Dict = {
         "total_ads": len(df),
-        "selected": n,
-        "variants_generated": len(new_ads_rows),
-        "pass_count": total_pass,
-        "fail_count": total_fail,
+        "selected": len(subset),
+        "variants_generated": len(result["new_ads_rows"]),
+        "pass_count": result["pass"],
+        "fail_count": result["fail"],
+        "checker_violations": result["violations"],
+        "compliance_failures": result["compliance_failures"],
         "message": f"Wizard run · mode={actual_mode}",
+        "provider_stats": provider.stats() if hasattr(provider, "stats") else {},
     }
-    return new_ads_rows, figma_rows, summary, _format_report(summary, report_details)
+    report = _format_report(summary, result["details"])
+    return result["new_ads_rows"], result["figma_rows"], summary, report
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rendering helpers (shared by the Wizard and the Creative Studio)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _session_dir(kind: str) -> Path:
+    if "session_uid" not in st.session_state:
+        st.session_state.session_uid = uuid.uuid4().hex[:8]
+    return Path("output") / "app" / st.session_state.session_uid / kind
+
+
+def _render_controls(
+    key: str, default_max: int = 12, show_max: bool = True
+) -> RenderConfig:
+    """Brand / format / template pickers → RenderConfig."""
+    cfg_render = (
+        load_config("config.yaml").render
+        if Path("config.yaml").exists()
+        else RenderConfig()
+    )
+    c1, c2, c3 = st.columns([1, 2, 2])
+    with c1:
+        brand_keys = list(PRESETS)
+        default_brand = (
+            str(cfg_render.brand) if str(cfg_render.brand) in PRESETS else "aurora"
+        )
+        brand = st.selectbox(
+            "Brand kit",
+            brand_keys,
+            index=brand_keys.index(default_brand),
+            format_func=lambda k: f"{PRESETS[k].name} ({k})",
+            key=f"{key}_brand",
+        )
+    with c2:
+        formats = st.multiselect(
+            "Formats",
+            list(FORMATS),
+            default=[f for f in cfg_render.formats if f in FORMATS] or ["square"],
+            format_func=lambda k: f"{FORMATS[k].label} · {FORMATS[k].width}×{FORMATS[k].height}",
+            key=f"{key}_formats",
+        )
+    with c3:
+        templates = st.multiselect(
+            "Templates (empty = rotate all)",
+            list(TEMPLATES),
+            default=[],
+            format_func=lambda k: TEMPLATES[k].name,
+            key=f"{key}_templates",
+        )
+    max_creatives = default_max
+    if show_max:
+        max_creatives = st.slider(
+            "How many variants to render", 1, 100, default_max, key=f"{key}_max"
+        )
+    return RenderConfig(
+        enabled=True,
+        formats=formats or ["square"],
+        templates=templates,
+        brand=brand,
+        max_creatives=max_creatives,
+        executor="thread",  # never fork inside the Streamlit server
+    )
+
+
+_ZIP_EXTRAS = ("gallery.html", "contact_sheet.png", "posts.csv")
+
+
+def _zip_dir(folder: Path) -> bytes:
+    """ZIP the latest render only: creatives/, the review files and posts.csv."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        creatives = folder / "creatives"
+        if creatives.is_dir():
+            for p in sorted(creatives.rglob("*")):
+                if p.is_file():
+                    zf.write(p, p.relative_to(folder))
+        for name in _ZIP_EXTRAS:
+            p = folder / name
+            if p.is_file():
+                zf.write(p, name)
+    return buf.getvalue()
+
+
+def _render_with_progress(creatives, out_dir: Path, rcfg: RenderConfig, title: str):
+    bar = st.progress(0, text="🎨 Rendering…")
+
+    def on_progress(done: int, total: int) -> None:
+        bar.progress(done / max(1, total), text=f"🎨 Rendering {done}/{total}")
+
+    rs = render_outputs(creatives, out_dir, rcfg, title=title, progress=on_progress)
+    bar.progress(1.0, text=f"✅ {rs.count} images ready")
+    return rs
+
+
+def _show_render_results(rs, out_dir: Path, key: str) -> None:
+    if not rs or not rs.items:
+        return
+    fmts = sorted({it.format for it in rs.items}, key=list(FORMATS).index)
+    tabs = st.tabs([FORMATS[f].label for f in fmts])
+    for tab, fk in zip(tabs, fmts):
+        with tab:
+            items = [it for it in rs.items if it.format == fk][:MAX_GALLERY_IMAGES]
+            n_cols = 4 if FORMATS[fk].aspect <= 1.05 else 2
+            cols = st.columns(n_cols)
+            for i, it in enumerate(items):
+                with cols[i % n_cols]:
+                    st.image(
+                        it.path,
+                        caption=f"{it.tag} · {TEMPLATES[it.template].name}",
+                        use_container_width=True,
+                    )
+    c1, c2 = st.columns(2)
+    with c1:
+        st.download_button(
+            f"⬇️ Download all {rs.count} images (.zip)",
+            data=_zip_dir(out_dir),
+            file_name="creatives.zip",
+            mime="application/zip",
+            type="primary",
+            use_container_width=True,
+            key=f"{key}_zip",
+        )
+    with c2:
+        if rs.gallery and Path(rs.gallery).exists():
+            st.caption(
+                f"Offline review gallery saved to `{rs.gallery}` (open in a browser)."
+            )
 
 
 def step3() -> None:
@@ -651,7 +733,8 @@ def step4() -> None:
 
     st.header("Step 4 — Download your files")
     st.markdown(
-        "All three files are ready. Download them and follow the Figma SOP to produce creatives."
+        "Your files are ready. Download them, render images right here, "
+        "or follow the Figma SOP for fully custom layouts."
     )
 
     new_ads_rows: List[Dict] = st.session_state.new_ads_rows
@@ -733,6 +816,28 @@ def step4() -> None:
             mime="text/markdown",
             use_container_width=True,
             type="primary",
+        )
+
+    # ── Render creatives ─────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("🎨 Turn variants into ready-to-post images")
+    st.caption(
+        "No Figma needed: render on-brand creatives for every placement, "
+        "then download them as a ZIP."
+    )
+    rcfg = _render_controls("wizard", default_max=min(12, len(new_ads_rows) or 1))
+    if st.button("🎨 Render creatives", type="primary", key="wizard_render_btn"):
+        out_dir = _session_dir("wizard")
+        creatives = creatives_from_variants(new_ads_rows, rcfg.max_creatives)
+        st.session_state.wizard_render = _render_with_progress(
+            creatives, out_dir, rcfg, "Ad variants"
+        )
+        st.session_state.wizard_render_dir = str(out_dir)
+    if st.session_state.get("wizard_render"):
+        _show_render_results(
+            st.session_state.wizard_render,
+            Path(st.session_state.wizard_render_dir),
+            "wizard",
         )
 
     # ── Inline report ────────────────────────────────────────────────────────
@@ -1118,6 +1223,122 @@ def connectors_tab() -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Creative Studio
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def studio_tab() -> None:
+    """Brief → posts → images, or copy sheet → images."""
+    st.header("🎨 Creative Studio")
+    st.caption(
+        "Describe a product once, get a batch of on-brand social posts rendered for "
+        "Facebook, Instagram, Stories/Reels and LinkedIn — in seconds."
+    )
+    src_brief, src_file = st.tabs(["✍️ From a brief", "📄 From a copy sheet (CSV/TSV)"])
+
+    with src_brief:
+        with st.form("studio_brief"):
+            c1, c2 = st.columns(2)
+            with c1:
+                product = st.text_input(
+                    "Product / service *", placeholder="Cloudstep running shoes"
+                )
+                audience = st.text_input("Audience", placeholder="busy city runners")
+                offer = st.text_input("Offer", placeholder="30% off launch week")
+                pain = st.text_input(
+                    "Problem it solves", placeholder="sore feet after long runs"
+                )
+            with c2:
+                benefits_raw = st.text_area(
+                    "Key benefits (one per line)",
+                    placeholder="Featherlight 180g build\nCushioned for 20km runs",
+                    height=120,
+                )
+                tone = st.text_input("Tone", placeholder="confident, warm")
+                c3, c4, c5 = st.columns(3)
+                lang = c3.selectbox("Language", ["auto", "en", "vi"])
+                n_posts = c4.number_input("Posts", 1, 60, 6)
+                mode = c5.selectbox(
+                    "Writer",
+                    ["dry", "live"],
+                    help="dry = offline copywriter · live = Claude",
+                )
+            rcfg = _render_controls("studio", show_max=False)
+            submitted = st.form_submit_button("✨ Generate & render", type="primary")
+
+        if submitted:
+            if not product.strip():
+                st.error("Please enter a product or service.")
+            else:
+                cfg = load_config("config.yaml")
+                provider, _ = _resolve_provider(cfg, mode)
+                brief = Brief(
+                    product=product.strip(),
+                    audience=audience.strip(),
+                    offer=offer.strip(),
+                    benefits=[
+                        b.strip() for b in benefits_raw.splitlines() if b.strip()
+                    ],
+                    pain=pain.strip(),
+                    tone=tone.strip(),
+                    language=None if lang == "auto" else lang,
+                )
+                from gcf.posts import generate_posts
+
+                with st.spinner("✍️ Writing posts…"):
+                    posts = generate_posts(brief, provider, n=int(n_posts), cfg=cfg)
+                out_dir = _session_dir("studio")
+                write_posts_csv(posts, out_dir / "posts.csv")
+                st.session_state.studio_posts = [p.to_dict() for p in posts]
+                st.session_state.studio_render = _render_with_progress(
+                    creatives_from_posts(posts), out_dir, rcfg, brief.product
+                )
+                st.session_state.studio_dir = str(out_dir)
+
+        if st.session_state.get("studio_render"):
+            with st.expander("📝 Post copy", expanded=False):
+                st.dataframe(
+                    pd.DataFrame(st.session_state.studio_posts),
+                    use_container_width=True,
+                )
+            _show_render_results(
+                st.session_state.studio_render,
+                Path(st.session_state.studio_dir),
+                "studio",
+            )
+
+    with src_file:
+        st.markdown(
+            "Upload any sheet with a `headline` column (optional: `description`, `cta`, "
+            "`eyebrow`, `badge`, `template`). Figma TSV (`H1/DESC/TAG`) works too."
+        )
+        up = st.file_uploader("Copy sheet", type=["csv", "tsv"], key="studio_file")
+        rcfg_f = _render_controls("studio_file", default_max=24)
+        if up is not None and st.button("🎨 Render sheet", type="primary"):
+            out_dir = _session_dir("sheet")
+            upload_dir = _session_dir("uploads")
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            src = upload_dir / f"sheet{Path(up.name).suffix.lower()}"
+            src.write_bytes(up.getvalue())
+            try:
+                # Uploaded sheets may not reference files on the server.
+                creatives = creatives_from_file(
+                    src, limit=rcfg_f.max_creatives, allow_images=False
+                )
+            except Exception as exc:
+                st.error(f"Could not read sheet: {exc}")
+            else:
+                st.session_state.sheet_render = _render_with_progress(
+                    creatives, out_dir, rcfg_f, Path(up.name).stem
+                )
+                st.session_state.sheet_dir = str(out_dir)
+        if st.session_state.get("sheet_render"):
+            _show_render_results(
+                st.session_state.sheet_render, Path(st.session_state.sheet_dir), "sheet"
+            )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1134,11 +1355,22 @@ def main() -> None:
         st.session_state.wizard_step = 1
 
     st.title("🚀 Growth Creative Factory")
-    st.caption("AI-powered ad variation pipeline · 4-step wizard for marketing teams")
-
-    tab_wizard, tab_board, tab_handoff, tab_connectors = st.tabs(
-        ["🧙 Wizard", "📊 Learning Board", "🤝 Handoff", "🔌 Connectors"]
+    st.caption(
+        "Open-source creative factory · performance data → AI copy → on-brand images, in bulk"
     )
+
+    tab_studio, tab_wizard, tab_board, tab_handoff, tab_connectors = st.tabs(
+        [
+            "🎨 Creative Studio",
+            "🧙 Ads Wizard",
+            "📊 Learning Board",
+            "🤝 Handoff",
+            "🔌 Connectors",
+        ]
+    )
+
+    with tab_studio:
+        studio_tab()
 
     with tab_wizard:
         _render_stepper(st.session_state.wizard_step)

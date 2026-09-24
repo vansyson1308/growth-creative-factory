@@ -43,3 +43,7 @@ input/
 Thumbs.db
 .idea/
 .vscode/
+
+# Build artifacts
+/build/
+/dist/

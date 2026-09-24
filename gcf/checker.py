@@ -121,15 +121,30 @@ def check_copy(
     # Build index sets of flagged items
     bad_headline_idx: set[int] = set()
     bad_description_idx: set[int] = set()
+    clean_violations: List[Dict] = []
     for v in violations:
-        t = str(v.get("type", "")).upper()
-        idx = v.get("index")
-        if idx is None:
+        if not isinstance(v, dict):
             continue
+        t = str(v.get("type", "")).upper()
+        try:
+            idx = int(v.get("index"))
+        except (TypeError, ValueError):
+            continue
+        source = (
+            headlines
+            if t == "HEADLINE"
+            else descriptions if t == "DESCRIPTION" else None
+        )
+        if source is None or not 0 <= idx < len(source):
+            continue  # ignore hallucinated indexes instead of crashing
+        # Record the exact flagged text so callers can retry by content.
+        v = {**v, "type": t, "index": idx, "text": source[idx]}
+        clean_violations.append(v)
         if t == "HEADLINE":
-            bad_headline_idx.add(int(idx))
-        elif t == "DESCRIPTION":
-            bad_description_idx.add(int(idx))
+            bad_headline_idx.add(idx)
+        else:
+            bad_description_idx.add(idx)
+    violations = clean_violations
 
     clean_headlines = [h for i, h in enumerate(headlines) if i not in bad_headline_idx]
     clean_descriptions = [
