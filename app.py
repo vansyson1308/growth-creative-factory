@@ -473,6 +473,8 @@ def _run_generation(
         on_progress,
     )
     progress.progress(1.0, text="✅ Generation complete!")
+    if result.get("stopped_reason"):
+        st.warning(result["stopped_reason"], icon="⚠️")
 
     summary: Dict = {
         "total_ads": len(df),

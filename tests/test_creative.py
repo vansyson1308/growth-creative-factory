@@ -285,3 +285,26 @@ def test_gallery_and_contact_sheet(tmp_path):
     )
     with Image.open(sheet) as im:
         assert im.width == 2400
+
+
+def test_monochrome_logo_is_tinted_on_light_canvas(tmp_path):
+    from gcf.creative.components import Ctx, _logo_for
+    from gcf.creative.formats import get_format
+
+    logo = tmp_path / "white.png"
+    Image.new("RGBA", (200, 60), (255, 255, 255, 255)).save(logo)
+    ctx = Ctx(Creative("x"), get_format("square"), BrandKit(logo=str(logo)), ss=1)
+    ink = (21, 20, 50)
+    on_light = _logo_for(ctx, ink)
+    assert on_light.getpixel((10, 10))[:3] == ink  # re-tinted, alpha kept
+    on_dark = _logo_for(ctx, (255, 255, 255))
+    assert on_dark.getpixel((10, 10))[:3] == (255, 255, 255)  # untouched
+
+    colourful = tmp_path / "colour.png"
+    Image.new("RGBA", (200, 60), (230, 40, 90, 255)).save(colourful)
+    ctx = Ctx(Creative("x"), get_format("square"), BrandKit(logo=str(colourful)), ss=1)
+    assert _logo_for(ctx, ink).getpixel((10, 10))[:3] == (
+        230,
+        40,
+        90,
+    )  # brand colours kept

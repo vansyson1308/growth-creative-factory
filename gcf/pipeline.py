@@ -24,7 +24,7 @@ from gcf.io_csv import (
     write_report,
 )
 from gcf.memory import append_entry, load_memory
-from gcf.providers.base import BaseProvider
+from gcf.providers.base import BaseProvider, BudgetExceededError
 from gcf.selector import generate_strategy, select_underperforming
 
 
@@ -92,7 +92,9 @@ def generate_variants(
     """Run the agent chain for every selected ad and build variant rows.
 
     Returns ``{"new_ads_rows", "figma_rows", "details", "pass", "fail",
-    "violations", "compliance_failures"}``. Shared by the CLI and the UI.
+    "violations", "compliance_failures", "stopped_reason"}``. Shared by the CLI
+    and the UI. If the provider's call budget runs out, processing stops cleanly
+    and everything produced so far is returned (``stopped_reason`` explains).
     """
     new_ads_rows: List[Dict] = []
     figma_rows: List[Dict] = []
@@ -105,67 +107,176 @@ def generate_variants(
     n_ads = len(selected)
     run_stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
 
+    stopped_reason = ""
     for idx, (_, row) in enumerate(selected.iterrows()):
         ad = row.to_dict()
         if progress:
             progress(idx, n_ads, str(ad.get("ad_id", "")))
-        reason_info = reasons[idx] if idx < len(reasons) else {}
-        ad["_issue"] = reason_info.get("reasons", "") or ad.get("_issue", "")
-
-        # ── Step 2: generate_strategy (LLM — selector_prompt.txt) ────────────
-        strategy_result = generate_strategy(provider, ad, ad["_issue"], cfg)
-        strategy = strategy_result.get(
-            "strategy",
-            f"Improve engagement for ad {ad.get('ad_id', '')} — issues: {ad['_issue']}",
-        )
-        analysis = strategy_result.get("analysis", "")
-
-        memory_ctx = _build_memory_context(cfg, ad.get("campaign", ""))
-
-        brand_voice_guideline = ""
-        if mode == "live":
-            brand_voice_guideline = generate_brand_voice_guideline(
-                provider, cfg, ad.get("campaign", ""), ad.get("ad_group", "")
+        try:
+            ad_result = _process_ad(
+                idx,
+                ad,
+                reasons,
+                cfg,
+                provider,
+                mode,
+                cache_store,
+                run_stamp,
+                remaining,
+                n_ads,
             )
+        except BudgetExceededError as exc:
+            # Keep everything produced so far instead of losing the whole run.
+            stopped_reason = (
+                f"Stopped after {idx} of {n_ads} ads: call budget reached ({exc}). "
+                "Raise budget.max_calls_per_run to process the rest."
+            )
+            break
+        remaining = max(0, remaining - len(ad_result["rows"]))
+        new_ads_rows.extend(ad_result["rows"])
+        figma_rows.extend(ad_result["figma"])
+        report_details.append(ad_result["detail"])
+        total_pass += ad_result["pass"]
+        total_fail += ad_result["fail"]
+        total_violations += ad_result["violations"]
+        total_compliance_failures += ad_result["compliance_failures"]
 
-        # ── Step 3: generate_headlines (LLM — headline_prompt.txt) ───────────
-        headlines, h_fail = generate_headlines(
-            provider, ad, strategy, cfg, memory_ctx, brand_voice_guideline, cache_store
+    if progress:
+        progress(n_ads, n_ads, "")
+
+    return {
+        "new_ads_rows": new_ads_rows,
+        "figma_rows": figma_rows,
+        "details": report_details,
+        "pass": total_pass,
+        "fail": total_fail,
+        "violations": total_violations,
+        "compliance_failures": total_compliance_failures,
+        "stopped_reason": stopped_reason,
+    }
+
+
+def _process_ad(
+    idx: int,
+    ad: Dict,
+    reasons: List[Dict],
+    cfg: AppConfig,
+    provider: BaseProvider,
+    mode: str,
+    cache_store,
+    run_stamp: str,
+    remaining: int,
+    n_ads: int,
+) -> Dict:
+    """Agent chain for one ad → rows, figma rows, report detail and counters."""
+    reason_info = reasons[idx] if idx < len(reasons) else {}
+    ad["_issue"] = reason_info.get("reasons", "") or ad.get("_issue", "")
+
+    # ── Step 2: generate_strategy (LLM — selector_prompt.txt) ────────────
+    strategy_result = generate_strategy(provider, ad, ad["_issue"], cfg)
+    strategy = strategy_result.get(
+        "strategy",
+        f"Improve engagement for ad {ad.get('ad_id', '')} — issues: {ad['_issue']}",
+    )
+    analysis = strategy_result.get("analysis", "")
+
+    memory_ctx = _build_memory_context(cfg, ad.get("campaign", ""))
+
+    brand_voice_guideline = ""
+    if mode == "live":
+        brand_voice_guideline = generate_brand_voice_guideline(
+            provider, cfg, ad.get("campaign", ""), ad.get("ad_group", "")
         )
 
-        # ── Step 4: generate_descriptions (LLM — description_prompt.txt) ─────
-        descriptions, d_fail = generate_descriptions(
-            provider, ad, strategy, cfg, memory_ctx, brand_voice_guideline, cache_store
-        )
+    # ── Step 3: generate_headlines (LLM — headline_prompt.txt) ───────────
+    headlines, h_fail = generate_headlines(
+        provider, ad, strategy, cfg, memory_ctx, brand_voice_guideline, cache_store
+    )
 
-        # ── Step 5: check_copy (LLM — checker_prompt.txt) ─────────────────────
+    # ── Step 4: generate_descriptions (LLM — description_prompt.txt) ─────
+    descriptions, d_fail = generate_descriptions(
+        provider, ad, strategy, cfg, memory_ctx, brand_voice_guideline, cache_store
+    )
+
+    # ── Step 5: check_copy (LLM — checker_prompt.txt) ─────────────────────
+    headlines, descriptions, violations = check_copy(
+        provider, headlines, descriptions, cfg
+    )
+    ad_violations = len(violations)
+
+    # Retry only the failing agent(s) with concise checker feedback.
+    # check_copy already removed flagged items; *violations* indexes refer
+    # to the pre-removal lists, so we track failures by text.
+    for _ in range(cfg.generation.max_retries_validation):
+        if not violations:
+            break
+
+        headline_failures = [
+            {
+                "text": v.get("text", ""),
+                "reason": v.get("issue", "checker violation"),
+            }
+            for v in violations
+            if str(v.get("type", "")).upper() == "HEADLINE"
+        ]
+        description_failures = [
+            {
+                "text": v.get("text", ""),
+                "reason": v.get("issue", "checker violation"),
+            }
+            for v in violations
+            if str(v.get("type", "")).upper() == "DESCRIPTION"
+        ]
+
+        if headline_failures:
+            replacements = generate_headline_replacements(
+                provider,
+                ad,
+                strategy,
+                cfg,
+                headline_failures,
+                len(headline_failures),
+            )
+            headlines = headlines + [h for h in replacements if h not in headlines]
+
+        if description_failures:
+            replacements = generate_description_replacements(
+                provider,
+                ad,
+                strategy,
+                cfg,
+                description_failures,
+                len(description_failures),
+            )
+            descriptions = descriptions + [
+                d for d in replacements if d not in descriptions
+            ]
+
         headlines, descriptions, violations = check_copy(
             provider, headlines, descriptions, cfg
         )
-        ad_violations = len(violations)
+        ad_violations += len(violations)
 
-        # Retry only the failing agent(s) with concise checker feedback.
-        # check_copy already removed flagged items; *violations* indexes refer
-        # to the pre-removal lists, so we track failures by text.
+    compliance_failures: List[Dict] = []
+    ad_compliance_failures = 0
+    if mode == "live":
         for _ in range(cfg.generation.max_retries_validation):
-            if not violations:
+            headlines, descriptions, compliance_failures = filter_risky_claims(
+                headlines, descriptions
+            )
+            ad_compliance_failures += len(compliance_failures)
+            if not compliance_failures:
                 break
 
             headline_failures = [
-                {
-                    "text": v.get("text", ""),
-                    "reason": v.get("issue", "checker violation"),
-                }
-                for v in violations
-                if str(v.get("type", "")).upper() == "HEADLINE"
+                {"text": f["text"], "reason": f.get("reason", "risky claim")}
+                for f in compliance_failures
+                if f.get("type") == "HEADLINE"
             ]
             description_failures = [
-                {
-                    "text": v.get("text", ""),
-                    "reason": v.get("issue", "checker violation"),
-                }
-                for v in violations
-                if str(v.get("type", "")).upper() == "DESCRIPTION"
+                {"text": f["text"], "reason": f.get("reason", "risky claim")}
+                for f in compliance_failures
+                if f.get("type") == "DESCRIPTION"
             ]
 
             if headline_failures:
@@ -191,141 +302,78 @@ def generate_variants(
                 descriptions = descriptions + [
                     d for d in replacements if d not in descriptions
                 ]
-
-            headlines, descriptions, violations = check_copy(
-                provider, headlines, descriptions, cfg
+        else:
+            # Final sweep so no risky claim survives exhausted retries.
+            headlines, descriptions, leftover = filter_risky_claims(
+                headlines, descriptions
             )
-            ad_violations += len(violations)
+            ad_compliance_failures += len(leftover)
 
-        total_violations += ad_violations
+    h_count = len(headlines)
+    d_count = len(descriptions)
 
-        compliance_failures: List[Dict] = []
-        ad_compliance_failures = 0
-        if mode == "live":
-            for _ in range(cfg.generation.max_retries_validation):
-                headlines, descriptions, compliance_failures = filter_risky_claims(
-                    headlines, descriptions
-                )
-                ad_compliance_failures += len(compliance_failures)
-                if not compliance_failures:
-                    break
+    # Create variant set (unique per ad within the run)
+    ad_key = _safe_id(ad.get("ad_id", "") or f"AD{idx + 1:03d}")
+    variant_set_id = f"vs_{run_stamp}_{idx:03d}"
 
-                headline_failures = [
-                    {"text": f["text"], "reason": f.get("reason", "risky claim")}
-                    for f in compliance_failures
-                    if f.get("type") == "HEADLINE"
-                ]
-                description_failures = [
-                    {"text": f["text"], "reason": f.get("reason", "risky claim")}
-                    for f in compliance_failures
-                    if f.get("type") == "DESCRIPTION"
-                ]
+    # Cross-product, with the per-run cap shared fairly across ads
+    ads_left = n_ads - idx
+    allowance = max(1, remaining // ads_left) if remaining else 0
+    combos = _combine(headlines, descriptions, allowance)
 
-                if headline_failures:
-                    replacements = generate_headline_replacements(
-                        provider,
-                        ad,
-                        strategy,
-                        cfg,
-                        headline_failures,
-                        len(headline_failures),
-                    )
-                    headlines = headlines + [
-                        h for h in replacements if h not in headlines
-                    ]
-
-                if description_failures:
-                    replacements = generate_description_replacements(
-                        provider,
-                        ad,
-                        strategy,
-                        cfg,
-                        description_failures,
-                        len(description_failures),
-                    )
-                    descriptions = descriptions + [
-                        d for d in replacements if d not in descriptions
-                    ]
-            else:
-                # Final sweep so no risky claim survives exhausted retries.
-                headlines, descriptions, leftover = filter_risky_claims(
-                    headlines, descriptions
-                )
-                ad_compliance_failures += len(leftover)
-
-            total_compliance_failures += ad_compliance_failures
-
-        h_count = len(headlines)
-        d_count = len(descriptions)
-        total_pass += h_count + d_count
-        total_fail += h_fail + d_fail
-
-        # Create variant set (unique per ad within the run)
-        ad_key = _safe_id(ad.get("ad_id", "") or f"AD{idx + 1:03d}")
-        variant_set_id = f"vs_{run_stamp}_{idx:03d}"
-
-        # Cross-product, with the per-run cap shared fairly across ads
-        ads_left = n_ads - idx
-        allowance = max(1, remaining // ads_left) if remaining else 0
-        combos = _combine(headlines, descriptions, allowance)
-        remaining = max(0, remaining - len(combos))
-
-        for ci, (h, d) in enumerate(combos):
-            tag = f"{ad_key}-V{ci + 1:02d}"
-            new_ads_rows.append(
-                {
-                    "campaign": ad.get("campaign", ""),
-                    "ad_group": ad.get("ad_group", ""),
-                    "ad_id": ad.get("ad_id", ""),
-                    "original_headline": ad.get("headline", ""),
-                    "original_description": ad.get("description", ""),
-                    "variant_headline": h,
-                    "variant_description": d,
-                    "variant_set_id": variant_set_id,
-                    "tag": tag,
-                }
-            )
-            figma_rows.append({"H1": h, "DESC": d, "TAG": tag})
-
-        # Memory log
-        append_entry(
-            memory_path=cfg.memory.path,
-            campaign=ad.get("campaign", ""),
-            ad_group=ad.get("ad_group", ""),
-            ad_id=ad.get("ad_id", ""),
-            hypothesis=strategy,
-            variant_set_id=variant_set_id,
-            generated={"headlines": headlines, "descriptions": descriptions},
-            notes=f"mode={mode}",
-        )
-
-        report_details.append(
+    ad_rows: List[Dict] = []
+    ad_figma: List[Dict] = []
+    for ci, (h, d) in enumerate(combos):
+        tag = f"{ad_key}-V{ci + 1:02d}"
+        ad_rows.append(
             {
-                "ad_id": ad.get("ad_id", ""),
                 "campaign": ad.get("campaign", ""),
-                "issue": ad["_issue"],
-                "analysis": analysis,
-                "strategy": strategy,
-                "headlines_generated": h_count,
-                "descriptions_generated": d_count,
-                "checker_violations": ad_violations,
-                "compliance_failures": ad_compliance_failures,
-                "combos": len(combos),
+                "ad_group": ad.get("ad_group", ""),
+                "ad_id": ad.get("ad_id", ""),
+                "original_headline": ad.get("headline", ""),
+                "original_description": ad.get("description", ""),
+                "variant_headline": h,
+                "variant_description": d,
                 "variant_set_id": variant_set_id,
+                "tag": tag,
             }
         )
+        ad_figma.append({"H1": h, "DESC": d, "TAG": tag})
 
-    if progress:
-        progress(n_ads, n_ads, "")
+    # Memory log
+    append_entry(
+        memory_path=cfg.memory.path,
+        campaign=ad.get("campaign", ""),
+        ad_group=ad.get("ad_group", ""),
+        ad_id=ad.get("ad_id", ""),
+        hypothesis=strategy,
+        variant_set_id=variant_set_id,
+        generated={"headlines": headlines, "descriptions": descriptions},
+        notes=f"mode={mode}",
+    )
+
+    detail = {
+        "ad_id": ad.get("ad_id", ""),
+        "campaign": ad.get("campaign", ""),
+        "issue": ad["_issue"],
+        "analysis": analysis,
+        "strategy": strategy,
+        "headlines_generated": h_count,
+        "descriptions_generated": d_count,
+        "checker_violations": ad_violations,
+        "compliance_failures": ad_compliance_failures,
+        "combos": len(combos),
+        "variant_set_id": variant_set_id,
+    }
 
     return {
-        "new_ads_rows": new_ads_rows,
-        "figma_rows": figma_rows,
-        "details": report_details,
-        "pass": total_pass,
-        "fail": total_fail,
-        "violations": total_violations,
-        "compliance_failures": total_compliance_failures,
+        "rows": ad_rows,
+        "figma": ad_figma,
+        "detail": detail,
+        "pass": h_count + d_count,
+        "fail": h_fail + d_fail,
+        "violations": ad_violations,
+        "compliance_failures": ad_compliance_failures,
     }
 
 
@@ -435,7 +483,8 @@ def run_pipeline(
         "checker_violations": result["violations"],
         "compliance_failures": result["compliance_failures"],
         "creatives_rendered": render_info.get("rendered", 0),
-        "message": "Pipeline completed successfully.",
+        "message": result["stopped_reason"] or "Pipeline completed successfully.",
+        "stopped_reason": result["stopped_reason"],
         "provider_stats": provider_stats,
         "cache_stats": cache_stats,
         "render": render_info,
@@ -464,6 +513,8 @@ def _format_report(summary: Dict, details: List[Dict]) -> str:
         f"- Creative images rendered: {summary.get('creatives_rendered', 0)}",
         "",
     ]
+    if summary.get("stopped_reason"):
+        lines += [f"> ⚠️ {summary['stopped_reason']}", ""]
 
     rinfo = summary.get("render") or {}
     if rinfo.get("rendered"):

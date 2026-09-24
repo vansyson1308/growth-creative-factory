@@ -27,7 +27,8 @@ class BrandKit:
     dark: str = "#0B0B1F"
     paper: str = "#F5F3FF"
     ink: str = "#151432"
-    logo: Optional[str] = None  # path to a PNG/SVG-rasterised logo (transparent)
+    logo: Optional[str] = None  # transparent PNG, used on dark/colour canvases
+    logo_dark: Optional[str] = None  # optional variant for light canvases
     handle: str = ""  # e.g. "@auroralabs" or "auroralabs.io"
     cta: str = ""  # default CTA; empty → language-aware default
     fonts: Dict[str, str] = field(default_factory=dict)  # role → font path
@@ -143,8 +144,9 @@ def load_brand(
             data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
             if not isinstance(data, dict):
                 raise ValueError(f"Brand kit file {p} must contain a mapping.")
-            if data.get("logo") and not Path(str(data["logo"])).is_absolute():
-                data["logo"] = str((p.parent / str(data["logo"])).resolve())
+            for key in ("logo", "logo_dark"):
+                if data.get(key) and not Path(str(data[key])).is_absolute():
+                    data[key] = str((p.parent / str(data[key])).resolve())
             fonts = data.get("fonts") or {}
             data["fonts"] = {
                 role: (

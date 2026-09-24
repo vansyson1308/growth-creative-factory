@@ -11,7 +11,9 @@ import anthropic
 from dotenv import load_dotenv
 
 from gcf.config import BudgetConfig, RetryConfig
-from gcf.providers.base import BaseProvider
+from gcf.providers.base import BaseProvider, BudgetExceededError
+
+__all__ = ["AnthropicProvider", "BudgetExceededError"]
 
 
 def _as_int(v) -> int:
@@ -23,10 +25,6 @@ def _as_int(v) -> int:
 
 # HTTP status codes that warrant an automatic retry
 _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504, 529}
-
-
-class BudgetExceededError(RuntimeError):
-    """Raised when max_calls_per_run has been reached."""
 
 
 def _response_text(message) -> str:

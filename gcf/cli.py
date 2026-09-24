@@ -197,6 +197,8 @@ def run(
         )
 
     click.echo("")
+    if summary.get("stopped_reason"):
+        click.echo(f"⚠️  {summary['stopped_reason']}", err=True)
     click.echo("✅ Pipeline complete!")
     click.echo(f"   Ads analyzed:  {summary['total_ads']}")
     click.echo(f"   Underperforming: {summary['selected']}")

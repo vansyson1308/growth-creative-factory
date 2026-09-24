@@ -5,6 +5,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 
+class BudgetExceededError(RuntimeError):
+    """Raised when a provider's per-run call budget has been reached."""
+
+
 class BaseProvider(ABC):
     """Interface that all LLM providers must implement."""
 

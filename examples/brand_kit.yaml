@@ -11,7 +11,8 @@ paper: "#F3F7F4"           # light canvases
 ink: "#0B2A26"             # text on light canvases
 handle: "@acmeoutdoor"     # small meta text on editorial layouts (optional)
 cta: ""                    # default CTA; empty = language-aware ("Shop now" / "Mua ngay")
-# logo: logo.png           # transparent PNG recommended
+# logo: logo.png           # transparent PNG, shown on dark/colour backgrounds
+# logo_dark: logo-dark.png # optional variant for light backgrounds (mono logos auto-tint)
 # fonts:                   # any .ttf/.otf; roles: display, heading, body, serif
 #   display: fonts/MyBrand-Black.ttf
 #   body: fonts/MyBrand-Regular.ttf

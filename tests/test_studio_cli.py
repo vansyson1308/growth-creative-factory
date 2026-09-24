@@ -257,3 +257,26 @@ def test_app_module_imports():
     finally:
         os.chdir(cwd)
     assert callable(module.main) and callable(module.studio_tab)
+
+
+def test_budget_exhaustion_keeps_partial_results(tmp_path):
+    from gcf.providers.base import BudgetExceededError
+
+    class Budgeted(MockProvider):
+        def __init__(self, limit):
+            super().__init__()
+            self.limit = limit
+
+        def generate(self, prompt, system="", max_tokens=2048):
+            if len(self._call_log) >= self.limit:
+                raise BudgetExceededError(f"max_calls_per_run={self.limit} reached")
+            return super().generate(prompt, system, max_tokens)
+
+    cfg = _cfg(tmp_path)
+    out = tmp_path / "out"
+    summary = run_pipeline(SAMPLE, out, cfg, Budgeted(9), "dry", render=False)
+    # 4 calls per ad in dry mode → 2 full ads fit in a budget of 9
+    assert summary["stopped_reason"].startswith("Stopped after 2 of 8 ads")
+    rows = list(csv.DictReader(open(out / "new_ads.csv", encoding="utf-8")))
+    assert {r["ad_id"] for r in rows} == {"AD001", "AD002"}
+    assert "call budget reached" in (out / "report.md").read_text(encoding="utf-8")

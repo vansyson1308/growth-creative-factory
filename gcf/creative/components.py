@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw
 
 from gcf.creative import draw as D
 from gcf.creative.brand import BrandKit
-from gcf.creative.color import RGB, mix, readable_on
+from gcf.creative.color import RGB, contrast_ratio, mix, readable_on
 from gcf.creative.fonts import font_path, load_font
 from gcf.creative.formats import Format
 from gcf.creative.model import Creative
@@ -150,7 +150,7 @@ def brand_mark(
     u = ctx.u
     h = height * u
     x, y = xy
-    logo = D.load_image(ctx.brand.logo)
+    logo = _logo_for(ctx, color)
     if logo is not None:
         ratio = logo.width / max(1, logo.height)
         w = min(h * ratio, h * 6)
@@ -176,6 +176,37 @@ def brand_mark(
     paint_text(ctx, ib, (x + (h - ib.width) / 2, y + (h - ib.height) / 2), fg)
     paint_text(ctx, word, (x + h + gap, y + (h - word.height) / 2), color)
     return (x, y, x + total, y + h)
+
+
+def _logo_for(ctx: Ctx, fg: RGB) -> Optional[Image.Image]:
+    """Pick the logo variant that stays visible where it is placed.
+
+    *fg* is the foreground colour the layout uses at that spot (white on dark
+    canvases, ink on light ones). ``logo_dark`` is preferred on light spots;
+    a monochrome logo that would vanish is re-tinted to *fg* (alpha kept).
+    """
+    import numpy as np
+
+    from gcf.creative.color import luminance
+
+    on_light = luminance(fg) < 0.4
+    path = ctx.brand.logo_dark if (on_light and ctx.brand.logo_dark) else ctx.brand.logo
+    logo = D.load_image(path)
+    if logo is None:
+        return None
+    arr = np.asarray(logo, dtype=np.float32)
+    alpha = arr[..., 3]
+    opaque = alpha > 32
+    if not opaque.any():
+        return logo
+    rgb = arr[..., :3][opaque]
+    spread = float((rgb.max(axis=1) - rgb.min(axis=1)).mean())  # ~saturation
+    mean = tuple(int(v) for v in rgb.mean(axis=0))
+    if spread < 24 and contrast_ratio(mean, fg) > 3:
+        tinted = Image.new("RGBA", logo.size, (*fg, 0))
+        tinted.putalpha(logo.getchannel("A"))
+        return tinted
+    return logo
 
 
 def brand_mark_width(ctx: Ctx, height: float = 46) -> float:
