@@ -1,0 +1,11 @@
+# Fictional demo brand used by `gcf demo` — copy this folder to start your own kit.
+name: Lumaloom
+primary: "#1F4E5F"
+secondary: "#0B2E3A"
+accent: "#F2A541"
+dark: "#071A21"
+paper: "#F4F1EA"
+ink: "#10262E"
+logo: logo.png            # white logo; auto-tinted on light layouts
+handle: lumaloom.example
+radius: 0.7

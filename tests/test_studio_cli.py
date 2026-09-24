@@ -280,3 +280,14 @@ def test_budget_exhaustion_keeps_partial_results(tmp_path):
     rows = list(csv.DictReader(open(out / "new_ads.csv", encoding="utf-8")))
     assert {r["ad_id"] for r in rows} == {"AD001", "AD002"}
     assert "call budget reached" in (out / "report.md").read_text(encoding="utf-8")
+
+
+def test_demo_header_wraps_long_commands():
+    from gcf.demo import _command_lines, header_height
+
+    long = "gcf create " + " ".join(
+        f'--benefit "Benefit number {i}"' for i in range(12)
+    )
+    lines = _command_lines(2400, long)
+    assert len(lines) > 1 and lines[0].startswith("$ gcf create")
+    assert header_height(2400, long) > header_height(2400, "gcf demo")

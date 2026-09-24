@@ -66,7 +66,15 @@ jobs:
           gcf render --input examples/posts_sample.csv --out smoke/sheet --formats square,story
           test -f smoke/pipeline/gallery.html
           test "$(find smoke -name '*.png' | wc -l)" -ge 40
-      - name: Upload rendered gallery
+      - name: Rebuild the README proof set (gcf demo)
+        run: |
+          gcf demo --out smoke/demo
+          for f in 01-before-after 02-one-run-at-scale 03-brief-to-posts-en \
+                   04-brief-to-posts-vi 05-one-copy-any-brand 06-every-placement; do
+            test -s "smoke/demo/$f.jpg"
+          done
+          python -c "import json; d=json.load(open('smoke/demo/demo.json')); assert d['images']['02-one-run-at-scale.jpg']['images'] >= 50, d"
+      - name: Upload rendered creatives and demo set
         uses: actions/upload-artifact@v4
         with:
           name: rendered-creatives

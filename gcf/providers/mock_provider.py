@@ -114,6 +114,19 @@ def _int(prompt: str, pattern: str, default: int) -> int:
         return default
 
 
+def _parse_issues(text: str) -> dict:
+    """'CTR 0.0085 < 0.02; CPA 86.67 > 50.0' → {'ctr': (0.0085, 0.02), ...}"""
+    out = {}
+    for m in re.finditer(
+        r"(?i)\b(ctr|cpa|roas)\s+([\d.]+)\s*[<>]\s*([\d.]+)", text or ""
+    ):
+        try:
+            out[m.group(1).lower()] = (float(m.group(2)), float(m.group(3)))
+        except ValueError:
+            continue
+    return out
+
+
 def _product_from_prompt(prompt: str) -> str:
     campaign = _field(prompt, "Campaign")
     return copywriter.extract_product(
@@ -188,31 +201,70 @@ class MockProvider(BaseProvider):
     # ── Mock response builders ────────────────────────────────────────────────
 
     def _mock_strategy(self, prompt: str = "") -> str:
-        """Return a selector-style strategy JSON grounded in the ad's metrics."""
+        """Heuristic root-cause analysis grounded in the ad's actual metrics.
+
+        The metric furthest from its threshold is treated as the primary
+        problem; the second one (if any) is mentioned as supporting evidence.
+        """
         ad_id = _field(prompt, "AD ID") or "mock_ad"
-        issues = _field(prompt, "Issues detected").lower()
-        product = (
-            copywriter.extract_product(_field(prompt, "Current headline"))
-            or "the offer"
-        )
-        if "ctr" in issues:
-            analysis = (
-                f"Low CTR suggests the headline for {product} blends in with "
-                "competitors and gives no concrete reason to click."
+        headline = _field(prompt, "Current headline")
+        product = copywriter.extract_product(headline) or "the offer"
+        issues = _parse_issues(_field(prompt, "Issues detected"))
+
+        gaps = []
+        for metric, (value, limit) in issues.items():
+            if metric == "cpa" and limit:
+                gaps.append((value / limit - 1, metric, value, limit))
+            elif limit:
+                gaps.append((1 - value / limit, metric, value, limit))
+        gaps.sort(reverse=True)
+
+        def describe(metric, value, limit):
+            if metric == "ctr":
+                return (
+                    f"CTR is {value * 100:.2f}% against a {limit * 100:.0f}% target: "
+                    f"'{headline}' names the product but gives no reason to click"
+                )
+            if metric == "cpa":
+                return (
+                    f"each conversion costs ${value:.0f}, {value / limit:.1f}× the "
+                    f"${limit:.0f} target, so clicks are not pre-qualified"
+                )
+            return (
+                f"ROAS is {value:.2f}× against a {limit:.1f}× goal: the copy draws "
+                "browsers rather than buyers"
             )
-            strategy = "Lead with a concrete benefit plus a time-bound hook"
-        elif "roas" in issues:
-            analysis = (
-                f"Clicks are not converting into revenue — the copy for {product} "
-                "attracts browsers rather than buyers."
-            )
-            strategy = "Qualify intent with social proof and a clear value anchor"
-        elif "cpa" in issues:
-            analysis = f"Acquisition cost is high; the {product} message lacks urgency."
-            strategy = "Add urgency and a problem-solution framing to lift conversion"
-        else:
+
+        playbook = {
+            "ctr": [
+                "Lead with one concrete benefit and a clear call to action",
+                "Test curiosity hooks that make the scroll stop",
+                "Swap the generic headline for a specific, benefit-led one",
+            ],
+            "cpa": [
+                "Use a problem-solution angle that speaks to ready-to-buy customers",
+                "Add urgency so qualified buyers act now",
+                "Pre-qualify clicks with specific benefits and a clear offer",
+            ],
+            "roas": [
+                "Add social proof and a value anchor to lift purchase intent",
+                "Frame the offer around outcomes, not features",
+                "Lean on reviews and trust signals to convert browsers",
+            ],
+        }
+        if not gaps:
             analysis = f"Engagement on {product} is flat versus account benchmarks."
             strategy = "Test curiosity and social-proof angles against the control"
+        else:
+            _, metric, value, limit = gaps[0]
+            analysis = describe(metric, value, limit)
+            analysis = analysis[0].upper() + analysis[1:]
+            if len(gaps) > 1:
+                analysis += "; also, " + describe(*gaps[1][1:])
+            analysis += "."
+            options = playbook[metric]
+            seed = zlib.crc32(f"{ad_id}|{headline}".encode("utf-8"))
+            strategy = options[seed % len(options)]
         return json.dumps({"ad_id": ad_id, "analysis": analysis, "strategy": strategy})
 
     def _mock_brand_voice(self) -> str:

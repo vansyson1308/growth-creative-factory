@@ -319,7 +319,7 @@ SHOWCASE: List[Dict] = [
         "creative": dict(
             eyebrow="New · AI workspace",
             headline="Ship campaigns 10× faster",
-            description="Plan, write and design every ad in one workspace. Loved by 12k+ growth teams.",
+            description="Plan, write and design every ad in one workspace, with your whole team.",
             cta="Start free trial",
         ),
     },
@@ -377,7 +377,10 @@ def build_showcase(
 def build_showcase_assets(
     out_dir: Union[str, Path], progress: Progress = None
 ) -> List[str]:
-    """Composite images used by the README (JPEG to keep the repo light)."""
+    """Hero composites for the README (JPEG to keep the repo light).
+
+    The proof images live in ``docs/demo`` and come from ``gcf demo``.
+    """
     from gcf.creative import TEMPLATES, render_creative
     from gcf.creative.gallery import contact_sheet, strip
 
@@ -399,21 +402,6 @@ def build_showcase_assets(
                 row_height=560,
                 title="Growth Creative Factory",
                 subtitle="6 fictional brands · 6 templates · rendered offline in seconds",
-            )
-        )
-    )
-
-    # One creative, every placement
-    files.append(
-        str(
-            strip(
-                [
-                    written[f"sunset/{f}"]
-                    for f in ("story", "portrait", "square", "landscape")
-                ],
-                out / "formats.jpg",
-                height=900,
-                labels=["Story 9:16", "Feed 4:5", "Feed 1:1", "Link 1.91:1"],
             )
         )
     )
@@ -442,48 +430,6 @@ def build_showcase_assets(
             )
         )
     )
-
-    # Vietnamese — full diacritics support
-    vi = [
-        (
-            "verde",
-            "split",
-            dict(
-                eyebrow="Nông trại xanh",
-                headline="Rau sạch giao tận nhà mỗi sáng",
-                description="Thu hoạch lúc 5 giờ, giao trước 9 giờ. Miễn phí vận chuyển đơn đầu tiên.",
-                cta="Đặt rau ngay",
-            ),
-        ),
-        (
-            "noir",
-            "bold",
-            dict(
-                eyebrow="Cà phê đặc sản",
-                headline="Đậm đà hương Arabica Cầu Đất",
-                description="Rang mới mỗi tuần, xay theo yêu cầu. Giảm 25% cho đơn đầu tiên.",
-                cta="Mua ngay",
-            ),
-        ),
-        (
-            "blossom",
-            "glass",
-            dict(
-                eyebrow="Chăm sóc da",
-                headline="Rạng rỡ từ bên trong",
-                description="Serum vitamin C thuần chay, dịu nhẹ cho da nhạy cảm.",
-                cta="Khám phá",
-            ),
-        ),
-    ]
-    vi_paths = []
-    for brand, tpl, copy in vi:
-        p = tmp / f"vi-{brand}.png"
-        render_creative(Creative(**copy, tag=f"vi-{brand}"), tpl, "story", brand).save(
-            p
-        )
-        vi_paths.append(str(p))
-    files.append(str(strip(vi_paths, out / "vietnamese.jpg", height=1000)))
 
     import shutil
 
