@@ -19,11 +19,13 @@ import pandas as pd
 from gcf.config import AppConfig, RenderConfig
 from gcf.copywriter import EYEBROWS, Brief, Post
 from gcf.creative import (
+    FORMATS,
     Creative,
     RenderedCreative,
     detect_language,
     load_brand,
     parse_formats,
+    parse_templates,
     render_batch,
 )
 from gcf.creative.gallery import contact_sheet, html_gallery
@@ -111,13 +113,33 @@ def creatives_from_posts(posts: Sequence[Post], prefix: str = "POST") -> List[Cr
     ]
 
 
-def creatives_from_file(path: Union[str, Path], limit: int = 0) -> List[Creative]:
-    """Read CSV/TSV copy (Figma TSV, new_ads.csv, or a hand-made sheet)."""
+def _guess_delimiter(p: Path) -> str:
+    """Pick the delimiter from the header line (never a letter)."""
+    if p.suffix.lower() in (".tsv", ".tab"):
+        return "\t"
+    try:
+        with open(p, encoding="utf-8-sig", errors="replace") as fh:
+            header = fh.readline()
+    except OSError:
+        return ","
+    counts = {d: header.count(d) for d in (",", "\t", ";", "|")}
+    best = max(counts, key=counts.get)
+    return best if counts[best] > 0 else ","
+
+
+def creatives_from_file(
+    path: Union[str, Path], limit: int = 0, allow_images: bool = True
+) -> List[Creative]:
+    """Read CSV/TSV copy (Figma TSV, new_ads.csv, or a hand-made sheet).
+
+    Relative ``image`` paths resolve against the sheet's folder. Pass
+    ``allow_images=False`` for untrusted uploads so a sheet cannot pull
+    arbitrary files from the machine into rendered output.
+    """
     p = Path(path)
-    sep = "\t" if p.suffix.lower() in (".tsv", ".tab") else None
     try:
         df = pd.read_csv(
-            p, sep=sep, engine="python", dtype=str, encoding="utf-8-sig"
+            p, sep=_guess_delimiter(p), dtype=str, encoding="utf-8-sig"
         ).fillna("")
     except (pd.errors.ParserError, UnicodeDecodeError) as exc:
         raise ValueError(
@@ -130,8 +152,11 @@ def creatives_from_file(path: Union[str, Path], limit: int = 0) -> List[Creative
             continue
         if not c.tag:
             c.tag = f"C{i + 1:03d}"
-        if not c.eyebrow:
-            c.eyebrow = ""
+        if c.image:
+            if not allow_images:
+                c.image = None
+            elif not Path(c.image).expanduser().is_absolute():
+                c.image = str((p.parent / c.image).resolve())
         out.append(c)
         if limit and len(out) >= limit:
             break
@@ -162,11 +187,12 @@ def render_outputs(
     out = Path(out_dir)
     cdir = out / creatives_subdir
     brand = load_brand(rcfg.brand)
+    _clear_previous_render(out, cdir)
     items = render_batch(
         creatives,
         cdir,
         formats=parse_formats(rcfg.formats),
-        templates=rcfg.templates or None,
+        templates=parse_templates(rcfg.templates) or None,
         brand=brand,
         image_format=rcfg.image_format,
         workers=rcfg.workers or None,
@@ -192,6 +218,25 @@ def render_outputs(
             contact_sheet(pick, out / "contact_sheet.png", title=title, subtitle=sub)
         )
     return summary
+
+
+def _clear_previous_render(out: Path, cdir: Path) -> None:
+    """Remove images and review files a previous render wrote here, so a
+    re-render (or its ZIP) never mixes old and new creatives. Only files this
+    module creates are touched."""
+    for fk in FORMATS:
+        fdir = cdir / fk
+        if fdir.is_dir():
+            for f in fdir.iterdir():
+                if f.is_file() and f.suffix.lower() in (".png", ".jpg", ".jpeg"):
+                    f.unlink()
+            try:
+                fdir.rmdir()
+            except OSError:
+                pass  # contains user files — leave it
+    for f in (cdir / "manifest.csv", out / "gallery.html", out / "contact_sheet.png"):
+        if f.is_file():
+            f.unlink()
 
 
 def write_posts_csv(posts: Sequence[Post], path: Union[str, Path]) -> Path:

@@ -326,6 +326,8 @@ def create_cmd(
     rcfg = _apply_render_overrides(
         cfg.render, formats, templates, brand, None, image_format
     )
+    if not product.strip():
+        raise click.BadParameter("must not be empty", param_hint="--product")
     provider = _get_provider(cfg, mode)
     brief = Brief(
         product=product,

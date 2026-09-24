@@ -712,3 +712,16 @@ def get_template(key: str) -> Template:
     if k not in TEMPLATES:
         raise KeyError(f"Unknown template {key!r}. Available: {', '.join(TEMPLATES)}")
     return TEMPLATES[k]
+
+
+def parse_templates(value) -> List[str]:
+    """Accept ``"bold,glass"``, a list, ``"all"`` or empty (→ ``[]`` = rotate)."""
+    if value is None or value == "":
+        return []
+    items = value.split(",") if isinstance(value, str) else list(value)
+    keys = [str(i).strip().lower() for i in items if str(i).strip()]
+    if keys == ["all"]:
+        return list(TEMPLATE_ORDER)
+    for k in keys:
+        get_template(k)
+    return keys

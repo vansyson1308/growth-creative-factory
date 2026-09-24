@@ -555,12 +555,22 @@ def _render_controls(
     )
 
 
+_ZIP_EXTRAS = ("gallery.html", "contact_sheet.png", "posts.csv")
+
+
 def _zip_dir(folder: Path) -> bytes:
+    """ZIP the latest render only: creatives/, the review files and posts.csv."""
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for p in sorted(folder.rglob("*")):
+        creatives = folder / "creatives"
+        if creatives.is_dir():
+            for p in sorted(creatives.rglob("*")):
+                if p.is_file():
+                    zf.write(p, p.relative_to(folder))
+        for name in _ZIP_EXTRAS:
+            p = folder / name
             if p.is_file():
-                zf.write(p, p.relative_to(folder))
+                zf.write(p, name)
     return buf.getvalue()
 
 
@@ -1306,11 +1316,15 @@ def studio_tab() -> None:
         rcfg_f = _render_controls("studio_file", default_max=24)
         if up is not None and st.button("🎨 Render sheet", type="primary"):
             out_dir = _session_dir("sheet")
-            out_dir.mkdir(parents=True, exist_ok=True)
-            src = out_dir / f"input{Path(up.name).suffix.lower()}"
+            upload_dir = _session_dir("uploads")
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            src = upload_dir / f"sheet{Path(up.name).suffix.lower()}"
             src.write_bytes(up.getvalue())
             try:
-                creatives = creatives_from_file(src, limit=rcfg_f.max_creatives)
+                # Uploaded sheets may not reference files on the server.
+                creatives = creatives_from_file(
+                    src, limit=rcfg_f.max_creatives, allow_images=False
+                )
             except Exception as exc:
                 st.error(f"Could not read sheet: {exc}")
             else:

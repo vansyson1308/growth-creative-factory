@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 import os
 import re
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -19,7 +20,14 @@ from gcf.creative.brand import BrandKit, load_brand
 from gcf.creative.components import Ctx
 from gcf.creative.formats import Format, get_format, parse_formats
 from gcf.creative.model import Creative
-from gcf.creative.templates import TEMPLATE_ORDER, get_template
+from gcf.creative.templates import (
+    TEMPLATE_ORDER,
+    TEMPLATES,
+    get_template,
+    parse_templates,
+)
+
+log = logging.getLogger(__name__)
 
 SUPERSAMPLE = 2
 
@@ -99,8 +107,21 @@ def assign_templates(
 ) -> List[str]:
     """Pick a template per creative: explicit row value wins, otherwise rotate
     through *templates* (default: all) so a batch looks varied."""
-    pool = [get_template(t).key for t in (templates or TEMPLATE_ORDER)]
-    return [c.template or pool[i % len(pool)] for i, c in enumerate(creatives)]
+    pool = [get_template(t).key for t in (parse_templates(templates) or TEMPLATE_ORDER)]
+    chosen = []
+    for i, c in enumerate(creatives):
+        if c.template and c.template in TEMPLATES:
+            chosen.append(c.template)
+        else:
+            if c.template:
+                log.warning(
+                    "Unknown template %r for %r — using %s instead.",
+                    c.template,
+                    c.tag or c.headline[:30],
+                    pool[i % len(pool)],
+                )
+            chosen.append(pool[i % len(pool)])
+    return chosen
 
 
 def render_batch(
@@ -133,10 +154,10 @@ def render_batch(
         base = slugify(c.tag or f"creative-{i + 1:03d}")
         name = f"{base}_{tpl}"
         n = 2
-        while name in seen:
+        while name.lower() in seen:  # case-insensitive filesystems
             name = f"{base}_{tpl}-{n}"
             n += 1
-        seen.add(name)
+        seen.add(name.lower())
         for fk in fmts:
             jobs.append((c, tpl, fk, out / fk / f"{name}.{ext}"))
 

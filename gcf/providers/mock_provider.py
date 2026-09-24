@@ -274,10 +274,9 @@ class MockProvider(BaseProvider):
                 data = {}
         n = int(data.pop("n", 0) or _int(prompt, r"exactly\s+(\d+)\s+post", 6))
         allowed = set(copywriter.Brief.__dataclass_fields__)
-        brief = copywriter.Brief(
-            **{k: v for k, v in data.items() if k in allowed and v not in (None, "")}
-            or {"product": ""}
-        )
+        fields = {k: v for k, v in data.items() if k in allowed and v not in (None, "")}
+        fields.setdefault("product", "")
+        brief = copywriter.Brief(**fields)
         posts = copywriter.write_posts(brief, n=n, seed=self._seed_for(prompt))
         return json.dumps({"posts": [p.to_dict() for p in posts]}, ensure_ascii=False)
 

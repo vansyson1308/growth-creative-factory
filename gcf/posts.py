@@ -24,6 +24,9 @@ _PROMPT_PATH = Path(__file__).parent / "prompts" / "post_prompt.txt"
 
 MAX_POST_HEADLINE = 60
 MAX_POST_DESCRIPTION = 140
+MAX_CTA = 24
+MAX_EYEBROW = 40
+MAX_BADGE = 12
 _LANG_NAMES = {"en": "English", "vi": "Vietnamese"}
 
 
@@ -61,7 +64,11 @@ def generate_posts(
     cfg: Optional[AppConfig] = None,
     seed: int = 0,
 ) -> List[Post]:
-    """Return exactly *n* validated posts for *brief*."""
+    """Return *n* validated posts for *brief*.
+
+    LLM output is validated and topped up with offline copy; if the brief's
+    own wording trips the policy blocklist, the top-up avoids those fields.
+    """
     cfg = cfg or AppConfig()
     lang = brief.lang()
     payload = {k: v for k, v in asdict(brief).items() if v}
@@ -89,12 +96,16 @@ def generate_posts(
     posts: List[Post] = []
     seen = set()
     for item in _parse_posts(raw):
+        cta = str(item.get("cta", "")).strip()
+        eyebrow = str(item.get("eyebrow", "")).strip()
+        badge = str(item.get("badge", "")).strip()
         post = Post(
             headline=str(item.get("headline", "")).strip(),
             description=str(item.get("description", "")).strip(),
-            cta=str(item.get("cta", "")).strip(),
-            eyebrow=str(item.get("eyebrow", "")).strip(),
-            badge=str(item.get("badge", "")).strip(),
+            # Over-long labels fall back to defaults rather than crowding the design
+            cta=cta if len(cta) <= MAX_CTA else "",
+            eyebrow=eyebrow if len(eyebrow) <= MAX_EYEBROW else "",
+            badge=badge if len(badge) <= MAX_BADGE else "",
             angle=str(item.get("angle", "")).strip(),
         )
         key = post.headline.lower()
@@ -106,11 +117,33 @@ def generate_posts(
             break
 
     if len(posts) < n:  # back-fill offline so the batch is always complete
-        for post in copywriter.write_posts(brief, n=n * 2, seed=seed):
-            if len(posts) >= n:
-                break
-            if post.headline.lower() in seen or not _valid(post, cfg.policy):
-                continue
-            seen.add(post.headline.lower())
-            posts.append(post)
+        # If the brief itself trips the blocklist (e.g. "100% cotton tee"),
+        # fall back to copy that does not repeat the offending fields.
+        safe_brief = _policy_safe_brief(brief, cfg.policy)
+        for source in (brief, safe_brief):
+            for post in copywriter.write_posts(source, n=n * 3, seed=seed):
+                if len(posts) >= n:
+                    break
+                if post.headline.lower() in seen or not _valid(post, cfg.policy):
+                    continue
+                seen.add(post.headline.lower())
+                posts.append(post)
     return posts[:n]
+
+
+def _policy_safe_brief(brief: Brief, policy: PolicyConfig) -> Brief:
+    lang = brief.lang()
+
+    def ok(text: str) -> bool:
+        return check_policy(text, policy.blocked_patterns)
+
+    generic = "sản phẩm" if lang == "vi" else "our range"
+    return Brief(
+        product=brief.product if ok(brief.product) else generic,
+        audience=brief.audience if ok(brief.audience) else "",
+        offer=brief.offer if ok(brief.offer) else "",
+        benefits=[b for b in brief.benefits if ok(b)],
+        pain=brief.pain if ok(brief.pain) else "",
+        tone=brief.tone,
+        language=lang,
+    )

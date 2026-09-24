@@ -93,6 +93,7 @@ render:
   brand: aurora                        # preset (aurora|sunset|verde|tide|noir|blossom) or path/to/brand.yaml
   max_creatives: 24                    # distinct variants rendered per run (0 = all)
   image_format: png                    # png | jpg
-  workers: 0                           # 0 = auto (threads)
+  workers: 0                           # 0 = auto (one per CPU core, max 8)
+  executor: auto                       # auto (processes for big batches) | process | thread
   gallery: true                        # output/gallery.html review page
   contact_sheet: true                  # output/contact_sheet.png overview

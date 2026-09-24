@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
@@ -178,12 +179,15 @@ def html_gallery(
                 "badge": it.badge,
             }
         )
-    payload = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-    doc = (
-        _HTML.replace("__TITLE__", html.escape(title))
-        .replace("__SUBTITLE__", html.escape(subtitle))
-        .replace("__DATA__", payload)
-    )
+    # Escape every "<" so no string can close the <script> or open a comment.
+    payload = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+    values = {
+        "__TITLE__": html.escape(title),
+        "__SUBTITLE__": html.escape(subtitle),
+        "__DATA__": payload,
+    }
+    # Single pass: substituted text is never re-scanned for placeholders.
+    doc = re.sub(r"__(TITLE|SUBTITLE|DATA)__", lambda m: values[m.group(0)], _HTML)
     out.write_text(doc, encoding="utf-8")
     return out
 

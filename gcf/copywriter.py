@@ -454,6 +454,7 @@ def write_posts(
     lang = brief.lang()
     rng = random.Random(seed)
     d = _DEFAULTS[lang]
+    angles = [a for a in (angles or ANGLES) if a in _POST_HEAD[lang]] or list(ANGLES)
     product = brief.product.strip() or ("sản phẩm" if lang == "vi" else "our product")
     benefits = [b.strip().rstrip(".") for b in brief.benefits if b.strip()] or list(
         d["B"]

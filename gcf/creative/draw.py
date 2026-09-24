@@ -411,13 +411,21 @@ def generative_art(
     return img
 
 
-@lru_cache(maxsize=128)
 def _sphere(d: int, color: RGB) -> Image.Image:
-    """Shaded sphere with a specular highlight (fake 3D). Cached; callers must
-    not mutate the returned image."""
-    d = max(4, d)
-    full = d
-    d = min(d, 640)
+    """Shaded sphere with a specular highlight (fake 3D).
+
+    Only a ≤640px master is cached (a few MB in total); each call returns a
+    fresh resize, so callers may mutate the result.
+    """
+    d = max(4, int(d))
+    master = _sphere_master(min(d, 640), tuple(color))
+    if master.width == d:
+        return master.copy()
+    return master.resize((d, d), Image.Resampling.BICUBIC)
+
+
+@lru_cache(maxsize=24)
+def _sphere_master(d: int, color: RGB) -> Image.Image:
     ys, xs = np.mgrid[0:d, 0:d].astype(np.float32) + 0.5
     r = d / 2
     nx, ny = (xs - r) / r, (ys - r) / r
@@ -434,7 +442,4 @@ def _sphere(d: int, color: RGB) -> Image.Image:
     edge = np.clip((1 - dist) * r / 1.5, 0, 1)  # anti-aliased rim
     alpha = np.where(inside, 255 * edge, 0)
     arr = np.dstack([rgb, alpha]).astype(np.uint8)
-    img = Image.fromarray(arr, "RGBA")
-    if full != d:
-        img = img.resize((full, full), Image.Resampling.BICUBIC)
-    return img
+    return Image.fromarray(arr, "RGBA")

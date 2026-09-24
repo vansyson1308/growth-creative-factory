@@ -112,6 +112,30 @@ def line_block(ctx: Ctx, text: str, role: str, size: float, tracking: float = 0.
     return block
 
 
+def fit_label(
+    ctx: Ctx,
+    text: str,
+    role: str,
+    size: float,
+    max_width: Optional[float],
+    tracking_frac: float = 0.0,
+) -> Tuple[TextBlock, float]:
+    """Single-line label (eyebrow, button) that never exceeds *max_width*:
+    shrinks down to 75% of *size*, then truncates with an ellipsis."""
+    s = size
+    block = line_block(ctx, text, role, s, tracking=s * tracking_frac)
+    if not max_width or block.width <= max_width:
+        return block, s
+    while s > size * 0.75 and block.width > max_width:
+        s *= 0.94
+        block = line_block(ctx, text, role, s, tracking=s * tracking_frac)
+    cut = text
+    while block.width > max_width and len(cut) > 1:
+        cut = cut[:-1].rstrip()
+        block = line_block(ctx, cut + "…", role, s, tracking=s * tracking_frac)
+    return block, s
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Brand mark
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,11 +258,13 @@ def pill(
     role: str = "heading",
     tracking: float = 0.08,
     outline=None,
+    max_width: Optional[float] = None,
 ) -> Box:
     u = ctx.u
-    s = size * u
-    block = line_block(ctx, text, role, s, tracking=s * tracking)
-    px, h = s * 0.95, s * 2.05
+    s0 = size * u
+    px, h = s0 * 0.95, s0 * 2.05
+    limit = (max_width if max_width else ctx.safe[2] - ctx.safe[0]) - 2 * px
+    block, s = fit_label(ctx, text, role, s0, limit, tracking)
     w = block.width + 2 * px
     x, y = xy
     if align == "center":
@@ -297,14 +323,17 @@ def cta_button(
     align: str = "left",
     shadow: bool = True,
     gradient: Optional[Tuple[RGB, RGB]] = None,
+    max_width: Optional[float] = None,
 ) -> Box:
     u = ctx.u
     s = size * u
     fg = fg or readable_on(bg, (255, 255, 255), ctx.ink)
-    block = line_block(ctx, ctx.cta_text, "heading", s)
     px, h = s * 1.25, s * 2.55
     arrow_w = s * 0.95
-    w = block.width + 2 * px + arrow_w + s * 0.55
+    extra = 2 * px + arrow_w + s * 0.55
+    limit = (max_width if max_width else ctx.safe[2] - ctx.safe[0]) - extra
+    block, _ = fit_label(ctx, ctx.cta_text, "heading", s, limit)
+    w = block.width + extra
     x, y = xy
     if align == "center":
         x -= w / 2
@@ -334,11 +363,17 @@ def cta_button(
 
 
 def cta_link(
-    ctx: Ctx, xy: Tuple[float, float], size: float, color: RGB, align: str = "left"
+    ctx: Ctx,
+    xy: Tuple[float, float],
+    size: float,
+    color: RGB,
+    align: str = "left",
+    max_width: Optional[float] = None,
 ) -> Box:
     u = ctx.u
     s = size * u
-    block = line_block(ctx, ctx.cta_text, "heading", s)
+    limit = (max_width if max_width else ctx.safe[2] - ctx.safe[0]) - s * 1.6
+    block, _ = fit_label(ctx, ctx.cta_text, "heading", s, limit)
     arrow_w = s * 1.0
     w = block.width + s * 0.6 + arrow_w
     x, y = xy
@@ -552,10 +587,11 @@ def draw_column(ctx: Ctx, box: Box, style: ColumnStyle, valign: str = "bottom") 
                 style.eyebrow_bg,
                 style.eyebrow_fg,
                 style.align,
+                max_width=width,
             )
         else:
             s = style.eyebrow_size * u
-            b = line_block(ctx, text, "heading", s, tracking=s * 0.16)
+            b, _ = fit_label(ctx, text, "heading", s, width, 0.16)
             paint_text(ctx, b, (x0, y), style.eyebrow_fg, style.align, width)
         y += eh + ge
 
@@ -577,9 +613,17 @@ def draw_column(ctx: Ctx, box: Box, style: ColumnStyle, valign: str = "bottom") 
                 style.cta_fg,
                 style.align,
                 gradient=style.cta_gradient,
+                max_width=width,
             )
         else:
-            cta_link(ctx, (ax, y), style.cta_size, style.cta_bg[:3], style.align)
+            cta_link(
+                ctx,
+                (ax, y),
+                style.cta_size,
+                style.cta_bg[:3],
+                style.align,
+                max_width=width,
+            )
         y += ch
     return (x0, top, x1, y)
 
