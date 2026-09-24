@@ -17,8 +17,8 @@ Thanks for your interest in contributing to Growth Creative Factory.
 2. Install dependencies:
 
    ```bash
-   pip install -r requirements.txt
-   pip install pre-commit ruff black detect-secrets
+   pip install -e ".[all,dev]"
+   pip install pre-commit detect-secrets
    ```
 
 3. Install git hooks:
@@ -33,6 +33,13 @@ Thanks for your interest in contributing to Growth Creative Factory.
    black --check .
    ruff check .
    pytest -v
+   ```
+
+5. If you touched the creative engine, eyeball the output:
+
+   ```bash
+   gcf showcase --out /tmp/showcase          # every brand × template × format
+   gcf showcase --readme-assets --out docs/assets   # regenerate README images
    ```
 
 ## Coding style

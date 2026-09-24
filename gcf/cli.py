@@ -213,7 +213,7 @@ def run(
     # Print API / cache stats for live mode
     pstats = summary.get("provider_stats", {})
     cstats = summary.get("cache_stats", {})
-    if pstats:
+    if pstats and mode == "live":
         click.echo("")
         click.echo("📊 LLM Stats:")
         click.echo(
@@ -360,12 +360,23 @@ def create_cmd(
 @cli.command("showcase")
 @click.option("--out", "output_dir", default="docs/showcase", show_default=True)
 @click.option("--formats", default="square,portrait,story,landscape", show_default=True)
-def showcase_cmd(output_dir, formats):
+@click.option(
+    "--readme-assets",
+    is_flag=True,
+    help="Also build the composite images used in the README",
+)
+def showcase_cmd(output_dir, formats, readme_assets):
     """Render the multi-brand showcase (the images in the README)."""
     from gcf.creative import parse_formats
     from gcf.creative.gallery import contact_sheet
-    from gcf.studio import build_showcase
+    from gcf.studio import build_showcase, build_showcase_assets
 
+    if readme_assets:
+        click.echo(f"✨ Building README showcase assets → {output_dir}")
+        files = build_showcase_assets(output_dir, progress=_Bar("Showcase"))
+        for f in files:
+            click.echo(f"   • {f}")
+        return
     fmts = parse_formats(formats)
     click.echo(f"✨ Rendering showcase → {output_dir}")
     written = build_showcase(output_dir, fmts, progress=_Bar("Showcase"))

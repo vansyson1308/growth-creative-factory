@@ -1,3 +1,71 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "growth-creative-factory"
+version = "0.2.0"
+description = "Open-source creative factory: performance data → AI ad copy → on-brand social images, in bulk."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Growth Creative Factory contributors" }]
+keywords = [
+  "ads", "creative-automation", "facebook-ads", "meta-ads", "google-ads",
+  "social-media", "marketing", "claude", "image-generation", "copywriting",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Other Audience",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Graphics",
+  "Topic :: Office/Business",
+]
+dependencies = [
+  "anthropic>=0.39.0",
+  "click>=8.1.0",
+  "jinja2>=3.1.0",
+  "numpy>=1.24",
+  "pandas>=2.1.0",
+  "pillow>=10.0",
+  "python-dotenv>=1.0.0",
+  "pyyaml>=6.0",
+  "rapidfuzz>=3.5.0",
+]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.30.0"]
+connectors = [
+  "facebook-business>=20.0.0",
+  "google-ads>=24.1.0",
+  "google-auth>=2.35.0",
+  "google-auth-oauthlib>=1.2.1",
+  "gspread>=6.0.0",
+]
+all = ["growth-creative-factory[ui,connectors]"]
+dev = ["black==24.10.0", "ruff==0.9.6", "pytest>=7.4.0"]
+
+[project.scripts]
+gcf = "gcf.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/vansyson1308/growth-creative-factory"
+Issues = "https://github.com/vansyson1308/growth-creative-factory/issues"
+
+[tool.setuptools.packages.find]
+include = ["gcf*"]
+
+[tool.setuptools.package-data]
+gcf = ["prompts/*.txt", "assets/fonts/*.ttf", "assets/fonts/*.txt"]
+
 [tool.black]
 line-length = 88
 target-version = ["py310"]
@@ -9,3 +77,6 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

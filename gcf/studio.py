@@ -115,9 +115,14 @@ def creatives_from_file(path: Union[str, Path], limit: int = 0) -> List[Creative
     """Read CSV/TSV copy (Figma TSV, new_ads.csv, or a hand-made sheet)."""
     p = Path(path)
     sep = "\t" if p.suffix.lower() in (".tsv", ".tab") else None
-    df = pd.read_csv(
-        p, sep=sep, engine="python", dtype=str, encoding="utf-8-sig"
-    ).fillna("")
+    try:
+        df = pd.read_csv(
+            p, sep=sep, engine="python", dtype=str, encoding="utf-8-sig"
+        ).fillna("")
+    except (pd.errors.ParserError, UnicodeDecodeError) as exc:
+        raise ValueError(
+            f"Could not parse {p.name}: {exc}. Tip: quote cells that contain commas."
+        ) from exc
     out: List[Creative] = []
     for i, row in enumerate(df.to_dict("records")):
         c = Creative.from_row(row)
@@ -322,3 +327,120 @@ def build_showcase(
             if progress:
                 progress(done, total)
     return written
+
+
+def build_showcase_assets(
+    out_dir: Union[str, Path], progress: Progress = None
+) -> List[str]:
+    """Composite images used by the README (JPEG to keep the repo light)."""
+    from gcf.creative import TEMPLATES, render_creative
+    from gcf.creative.gallery import contact_sheet, strip
+
+    out = Path(out_dir)
+    tmp = out / "_frames"
+    tmp.mkdir(parents=True, exist_ok=True)
+    written = build_showcase(
+        tmp, ("square", "portrait", "story", "landscape"), progress
+    )
+    files: List[str] = []
+
+    grid = [written[f"{i['brand']}/square"] for i in SHOWCASE]
+    files.append(
+        str(
+            contact_sheet(
+                grid,
+                out / "showcase-grid.jpg",
+                width=2400,
+                row_height=560,
+                title="Growth Creative Factory",
+                subtitle="6 fictional brands · 6 templates · rendered offline in seconds",
+            )
+        )
+    )
+
+    # One creative, every placement
+    files.append(
+        str(
+            strip(
+                [
+                    written[f"sunset/{f}"]
+                    for f in ("story", "portrait", "square", "landscape")
+                ],
+                out / "formats.jpg",
+                height=900,
+                labels=["Story 9:16", "Feed 4:5", "Feed 1:1", "Link 1.91:1"],
+            )
+        )
+    )
+
+    # Same copy, every template
+    same = Creative(
+        eyebrow="New collection",
+        headline="Comfort you can feel from step one",
+        description="Featherlight knit, cloud-soft sole. Free returns within 30 days.",
+        cta="Shop now",
+        badge="-20%",
+        tag="tpl",
+    )
+    tpl_paths = []
+    for key in TEMPLATES:
+        p = tmp / f"tpl-{key}.png"
+        render_creative(same, key, "portrait", "aurora").save(p)
+        tpl_paths.append(str(p))
+    files.append(
+        str(
+            strip(
+                tpl_paths,
+                out / "templates.jpg",
+                height=700,
+                labels=[TEMPLATES[k].name for k in TEMPLATES],
+            )
+        )
+    )
+
+    # Vietnamese — full diacritics support
+    vi = [
+        (
+            "verde",
+            "split",
+            dict(
+                eyebrow="Nông trại xanh",
+                headline="Rau sạch giao tận nhà mỗi sáng",
+                description="Thu hoạch lúc 5 giờ, giao trước 9 giờ. Miễn phí vận chuyển đơn đầu tiên.",
+                cta="Đặt rau ngay",
+            ),
+        ),
+        (
+            "noir",
+            "bold",
+            dict(
+                eyebrow="Cà phê đặc sản",
+                headline="Đậm đà hương Arabica Cầu Đất",
+                description="Rang mới mỗi tuần, xay theo yêu cầu. Giảm 25% cho đơn đầu tiên.",
+                cta="Mua ngay",
+            ),
+        ),
+        (
+            "blossom",
+            "glass",
+            dict(
+                eyebrow="Chăm sóc da",
+                headline="Rạng rỡ từ bên trong",
+                description="Serum vitamin C thuần chay, dịu nhẹ cho da nhạy cảm.",
+                cta="Khám phá",
+            ),
+        ),
+    ]
+    vi_paths = []
+    for brand, tpl, copy in vi:
+        p = tmp / f"vi-{brand}.png"
+        render_creative(Creative(**copy, tag=f"vi-{brand}"), tpl, "story", brand).save(
+            p
+        )
+        vi_paths.append(str(p))
+    files.append(str(strip(vi_paths, out / "vietnamese.jpg", height=1000)))
+
+    import shutil
+
+    shutil.rmtree(tmp, ignore_errors=True)
+    return files

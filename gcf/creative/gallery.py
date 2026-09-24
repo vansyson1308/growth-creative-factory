@@ -82,10 +82,64 @@ def contact_sheet(
         mask = Image.new("L", (w, h), 0)
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, w, h), radius=14, fill=255)
         sheet.paste(thumb, (x, yy), mask)
+    return _save(sheet, out_path)
+
+
+def _save(img: Image.Image, out_path: str | Path) -> Path:
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    sheet.save(out, "PNG", optimize=True)
+    if out.suffix.lower() in (".jpg", ".jpeg"):
+        img.convert("RGB").save(
+            out, "JPEG", quality=88, optimize=True, progressive=True
+        )
+    else:
+        img.save(out, "PNG", optimize=True)
     return out
+
+
+def strip(
+    image_paths: Sequence[str],
+    out_path: str | Path,
+    height: int = 900,
+    gap: int = 36,
+    margin: int = 64,
+    background: Tuple[int, int, int] = (14, 14, 20),
+    labels: Optional[Sequence[str]] = None,
+) -> Path:
+    """One row of images at equal height, bottom-aligned, optional captions."""
+    ims = []
+    for p in image_paths:
+        with Image.open(p) as im:
+            ims.append(im.convert("RGB"))
+    tallest = max(im.height for im in ims)
+    scale = height / tallest
+    sized = [
+        im.resize(
+            (int(im.width * scale), int(im.height * scale)), Image.Resampling.LANCZOS
+        )
+        for im in ims
+    ]
+    label_h = 64 if labels else 0
+    width = sum(im.width for im in sized) + gap * (len(sized) - 1) + 2 * margin
+    canvas = Image.new("RGB", (width, height + 2 * margin + label_h), background)
+    d = ImageDraw.Draw(canvas)
+    font = load_font(font_path("heading"), 30)
+    x = margin
+    for i, im in enumerate(sized):
+        y = margin + height - im.height
+        mask = Image.new("L", im.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, *im.size), radius=16, fill=255)
+        canvas.paste(im, (x, y), mask)
+        if labels and i < len(labels):
+            tw = font.getlength(labels[i])
+            d.text(
+                (x + (im.width - tw) / 2, margin + height + 22),
+                labels[i],
+                font=font,
+                fill=(170, 170, 190),
+            )
+        x += im.width + gap
+    return _save(canvas, out_path)
 
 
 def html_gallery(
