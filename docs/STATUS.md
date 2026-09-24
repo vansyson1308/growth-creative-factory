@@ -6,7 +6,7 @@
 
 | Area | Status |
 |---|---|
-| Test suite | 299 tests, Python 3.10–3.13 |
+| Test suite | 326 tests, Python 3.10–3.13 |
 | Lint / format | `ruff`, `black` enforced in CI |
 | End-to-end | CI smoke job runs `gcf run`, `gcf create`, `gcf render` on a core-only install and uploads the rendered images |
 | Packaging | `pip install .` → `gcf` console script; extras `ui`, `connectors`, `dev` |
