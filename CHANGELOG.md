@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `gcf demo` rebuilds the README proof set in `docs/demo` from `examples/`:
+  - before→after board (underperforming ads, their diagnosis, and the new creatives)
+  - 75-image run mosaic with measured timings
+  - brief→posts sheets in EN and VI
+  - brand-kit swap, including a custom YAML kit with a logo
+  - every placement from one creative
+  - `demo.json` with versions, timings and the generated copy
+- `scripts/record_demo_media.py` records the app walkthrough GIF and the review-gallery screenshot with a headless browser.
+- `examples/demo_ads.csv` and `examples/demo_brand/` (fictional advertisers and a custom brand kit).
+- CI smoke job runs `gcf demo` and uploads the result.
+
+### Changed
+- The offline copywriter no longer invents facts. Review counts, star ratings, delivery and returns promises, and "while stock lasts" scarcity were removed from every template.
+- Offline copy is grammatically safe with plural product names. English product names are never shortened below two words; Vietnamese names are kept whole, with service clauses dropped ("Rau hữu cơ giao tận nhà" → "Rau hữu cơ").
+- The dry-mode strategist ranks the ad's actual CTR/CPA/ROAS gaps and cites the numbers, instead of giving every ad the same diagnosis.
+- `run_pipeline` returns per-ad `details` in its summary.
+- Story split layouts use Meta's ~13% bottom safe zone, so the copy panel is no longer half empty.
+
 ## [0.2.0] - 2026-09-24
 
 ### Added

@@ -173,4 +173,15 @@ class TestMockProvider:
         )
         data = json.loads(MockProvider().generate(prompt))
         assert data["ad_id"] == "AD9"
-        assert "revenue" in data["analysis"].lower()
+        assert "ROAS is 0.40×" in data["analysis"]  # grounded in the real metric
+        assert data["strategy"]
+
+    def test_strategy_prioritises_worst_metric(self):
+        prompt = (
+            "You are an expert performance marketing analyst.\n"
+            "- AD ID: AD1\n- Current headline: Summer Bags\n"
+            "Issues detected: CTR 0.0190 < 0.02; CPA 150.00 > 50.0"
+        )
+        analysis = json.loads(MockProvider().generate(prompt))["analysis"]
+        assert analysis.startswith("Each conversion costs $150, 3.0×")
+        assert "CTR is 1.90%" in analysis

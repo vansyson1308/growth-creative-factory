@@ -488,6 +488,7 @@ def run_pipeline(
         "provider_stats": provider_stats,
         "cache_stats": cache_stats,
         "render": render_info,
+        "details": result["details"],
     }
     write_report(_format_report(summary, result["details"]), output_dir / "report.md")
 

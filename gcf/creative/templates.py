@@ -290,9 +290,12 @@ def _split(ctx: Ctx) -> None:
             sticker(
                 ctx, ctx.badge, (sx1 - 110 * u, panel_top - 10 * u), 100, ctx.accent
             )
+        # Stories: Meta keeps ~13% at the bottom for its UI; the default 19%
+        # safe inset would leave the copy panel half empty.
+        bottom = max(sy1, H * 0.87) if ctx.is_tall else sy1
         draw_column(
             ctx,
-            (sx0, panel_top + 64 * u, sx1, sy1),
+            (sx0, panel_top + 64 * u, sx1, bottom),
             style,
             valign="center",
         )

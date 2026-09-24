@@ -397,6 +397,29 @@ def showcase_cmd(output_dir, formats, readme_assets):
     click.echo(f"✅ {len(written)} images written.")
 
 
+@cli.command("demo")
+@click.option("--out", "output_dir", default="docs/demo", show_default=True)
+@click.option(
+    "--examples", "examples_dir", default=None, help="Folder with demo_ads.csv"
+)
+def demo_cmd(output_dir, examples_dir):
+    """Rebuild the proof images in the README from examples/ (dry mode)."""
+    from gcf.demo import build_demo
+
+    click.echo(f"🎬 Building the demo set → {output_dir}")
+    try:
+        manifest = build_demo(
+            output_dir,
+            progress=lambda m: click.echo(f"   {m}"),
+            examples_dir=examples_dir,
+        )
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc))
+    for name, info in manifest["images"].items():
+        click.echo(f"   • {name}: {info['what']}")
+    click.echo(f"✅ Done — details in {output_dir}/demo.json")
+
+
 @cli.command("templates")
 def templates_cmd():
     """List creative templates."""

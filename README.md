@@ -49,7 +49,68 @@ Growth Creative Factory closes that loop in one command:
 | 🧭 **Guardrails** | Call budget, retries with backoff, response cache, refusal handling, strict config validation. |
 | 🖥️ **Three interfaces** | CLI, Streamlit app (Creative Studio + Ads Wizard), and a Python API. |
 
-<img src="docs/assets/formats.jpg" alt="The same creative rendered for Story, Feed 4:5, Feed 1:1 and Link placements" width="100%">
+## Proof, not promises
+
+Every image in this section was produced by this repository, not mocked up in a design tool.
+Each caption shows the command that made it. The whole set is rebuilt with **`gcf demo`**
+(source: [`gcf/demo.py`](gcf/demo.py), inputs in [`examples/`](examples/)) in about 40 seconds
+on a laptop, offline, with no API key. CI runs it on every push and attaches the output to
+the build. Timings, versions and the generated copy are logged in
+[`docs/demo/demo.json`](docs/demo/demo.json).
+
+### 1 · An underperforming ad goes in, a diagnosis and new creatives come out
+
+`gcf run --input examples/demo_ads.csv --mode dry`: the selector flags ads by CTR, CPA and ROAS.
+The strategist explains why each one is failing, using that ad's own numbers. The writers and
+the checker produce compliant copy, and the renderer turns every variant into images in that
+advertiser's brand kit.
+
+<img src="docs/demo/01-before-after.jpg" alt="Three underperforming ads with their metrics, diagnosis and strategy, each followed by three newly generated ad creatives" width="100%">
+
+### 2 · One run, 75 unique images
+
+Five flagged ads become 75 headline × description variants, and each one is rendered. The
+numbers in the subtitle were measured during the run: copy took 0.1 s and rendering took 16 s
+on 4 CPU cores.
+
+<img src="docs/demo/02-one-run-at-scale.jpg" alt="Mosaic of 75 generated ad creatives from a single pipeline run" width="100%">
+
+### 3 · The app, recorded live
+
+A real Streamlit session, driven by a headless browser: type a brief, click generate, get
+18 images and a ZIP. Recorded with
+[`scripts/record_demo_media.py`](scripts/record_demo_media.py).
+
+<img src="docs/demo/08-studio-app.gif" alt="Screen recording of the Creative Studio: filling in a product brief and generating a batch of social posts" width="100%">
+
+### 4 · A product brief becomes a week of posts, in English or Vietnamese
+
+<img src="docs/demo/03-brief-to-posts-en.jpg" alt="Six English social posts generated from one product brief" width="100%">
+
+<img src="docs/demo/04-brief-to-posts-vi.jpg" alt="Six Vietnamese social posts generated from one product brief" width="100%">
+
+### 5 · Your brand, not ours
+
+The same copy in five built-in kits, plus a custom kit (a fictional brand) loaded from
+[`examples/demo_brand/brand.yaml`](examples/demo_brand/brand.yaml), with its own logo.
+
+<img src="docs/demo/05-one-copy-any-brand.jpg" alt="The same ad rendered in six different brand kits" width="100%">
+
+### 6 · Every placement from one line of copy
+
+<img src="docs/demo/06-every-placement.jpg" alt="One Vietnamese creative rendered as Story, Feed 4:5, Feed 1:1, Link and 16:9" width="100%">
+
+### 7 · A review page your team can actually use
+
+Every run writes `output/gallery.html`: filters by format and template, search, full-size
+preview and per-image downloads. It works offline and needs no server.
+
+<img src="docs/demo/07-review-gallery.jpg" alt="The generated HTML review gallery with format and template filters" width="100%">
+
+> **What dry mode is and isn't.** The images above use the built-in offline copywriter, so
+> anyone can reproduce them for free. Its copy is template-based and deliberately avoids
+> invented facts (no fake review counts, ratings or delivery promises). Live mode sends the
+> same pipeline through Claude for sharper, more specific copy.
 
 ## Quickstart (2 minutes, no API key)
 
@@ -88,8 +149,6 @@ gcf render --input examples/posts_sample.csv --formats all --brand noir
 streamlit run app.py
 ```
 
-<img src="docs/assets/studio-app.jpg" alt="Creative Studio tab in the Streamlit app showing a rendered batch" width="100%">
-
 ## Templates
 
 <img src="docs/assets/templates.jpg" alt="The same copy rendered in all six templates" width="100%">
@@ -122,8 +181,6 @@ Six presets ship with the repo (`gcf brands`): `aurora`, `sunset`, `verde`, `tid
 `blossom`. For your own brand, copy [`examples/brand_kit.yaml`](examples/brand_kit.yaml),
 set colours, logo and fonts, and pass `--brand path/to/brand_kit.yaml` — or set
 `render.brand` in `config.yaml`.
-
-<img src="docs/assets/vietnamese.jpg" alt="Three Vietnamese-language story creatives" width="100%">
 
 ## How it works
 
@@ -191,7 +248,8 @@ See [docs/CREATIVE_ENGINE.md](docs/CREATIVE_ENGINE.md) for the full reference.
 | `gcf run` | Full pipeline: select → write → check → render (`--no-render`, `--formats`, `--templates`, `--brand`, `--max-creatives`) |
 | `gcf create` | Brief → N social posts → images |
 | `gcf render` | Any CSV/TSV with a `headline` column → images |
-| `gcf showcase` | Rebuild the showcase (`--readme-assets` for the images in this README) |
+| `gcf demo` | Rebuild the proof images in `docs/demo` from `examples/` |
+| `gcf showcase` | Rebuild the showcase (`--readme-assets` for the hero images) |
 | `gcf templates` · `gcf formats` · `gcf brands` | List what's available |
 | `gcf google-ads pull` · `gcf meta-ads pull` | Pull performance into the unified schema |
 | `gcf sheets push` | Push outputs to Google Sheets |

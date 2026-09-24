@@ -39,7 +39,9 @@ Thanks for your interest in contributing to Growth Creative Factory.
 
    ```bash
    gcf showcase --out /tmp/showcase          # every brand × template × format
-   gcf showcase --readme-assets --out docs/assets   # regenerate README images
+   gcf showcase --readme-assets --out docs/assets   # regenerate README hero images
+   gcf demo --out docs/demo                          # regenerate the README proof set
+   python scripts/record_demo_media.py --out docs/demo   # app GIF + gallery shot (needs Playwright)
    ```
 
 ## Coding style

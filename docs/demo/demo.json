@@ -1,0 +1,147 @@
+{
+  "gcf_version": "0.2.0",
+  "python": "3.11.15",
+  "platform": "Linux-6.18.44-fc-v37-x86_64-with-glibc2.39",
+  "cpu_count": 4,
+  "mode": "dry (offline copywriter, no API key)",
+  "images": {
+    "01-before-after.jpg": {
+      "what": "Underperforming ads to diagnosis, strategy and new creatives",
+      "command": "gcf run --input examples/demo_ads.csv --mode dry",
+      "ads_selected": 5,
+      "variants": 75
+    },
+    "02-one-run-at-scale.jpg": {
+      "what": "Every variant from one run, rendered",
+      "images": 75,
+      "copy_seconds": 0.11,
+      "render_seconds": 15.98
+    },
+    "03-brief-to-posts-en.jpg": {
+      "what": "One product brief, six social posts",
+      "command": "gcf create --product \"Cloudstep running shoes\" --audience \"busy city runners\" --offer \"30% off launch week\" --benefit \"Featherlight 180g build\" --benefit \"Cushioned for 20km runs\" --pain \"sore feet after long runs\" --brand sunset",
+      "posts": [
+        {
+          "eyebrow": "Everyday value",
+          "headline": "More joy, less effort: Cloudstep running shoes",
+          "description": "Featherlight 180g build. Cushioned for 20km runs. Made for busy city runners.",
+          "cta": "Shop now",
+          "badge": "-30%",
+          "angle": "benefit"
+        },
+        {
+          "eyebrow": "Limited time",
+          "headline": "30% off launch week — don't miss it",
+          "description": "30% off launch week on Cloudstep running shoes. Featherlight 180g build. Cushioned for 20km runs.",
+          "cta": "Get the deal",
+          "badge": "-30%",
+          "angle": "urgency"
+        },
+        {
+          "eyebrow": "Customer favourite",
+          "headline": "Why people love Cloudstep running shoes",
+          "description": "Made for busy city runners who want more. Featherlight 180g build, and cushioned for 20km runs.",
+          "cta": "See why",
+          "badge": "",
+          "angle": "social_proof"
+        },
+        {
+          "eyebrow": "The easy fix",
+          "headline": "Say goodbye to sore feet after long runs",
+          "description": "Featherlight 180g build. Cushioned for 20km runs. No more compromises.",
+          "cta": "Learn more",
+          "badge": "",
+          "angle": "problem_solution"
+        },
+        {
+          "eyebrow": "Just dropped",
+          "headline": "Meet the new Cloudstep running shoes",
+          "description": "Featherlight 180g build. Cushioned for 20km runs. Swipe to see it in action.",
+          "cta": "Discover",
+          "badge": "",
+          "angle": "curiosity"
+        },
+        {
+          "eyebrow": "Everyday value",
+          "headline": "Cloudstep running shoes, made effortless",
+          "description": "Cushioned for 20km runs. Featherlight 180g build. Made for busy city runners.",
+          "cta": "Shop now",
+          "badge": "-30%",
+          "angle": "benefit"
+        }
+      ]
+    },
+    "04-brief-to-posts-vi.jpg": {
+      "what": "Một brief, sáu bài đăng tiếng Việt",
+      "command": "gcf create --product \"Cà phê Arabica Cầu Đất\" --audience \"dân văn phòng\" --offer \"Giảm 25% tuần này\" --benefit \"Hương thơm đậm đà\" --benefit \"Rang mới mỗi tuần\" --pain \"cà phê đắng gắt\" --brand noir",
+      "posts": [
+        {
+          "eyebrow": "Giá tốt mỗi ngày",
+          "headline": "Nâng cấp Cà phê Arabica Cầu Đất của bạn",
+          "description": "Hương thơm đậm đà. Rang mới mỗi tuần. Dành riêng cho dân văn phòng.",
+          "cta": "Mua ngay",
+          "badge": "-25%",
+          "angle": "benefit"
+        },
+        {
+          "eyebrow": "Ưu đãi có hạn",
+          "headline": "Giảm 25% tuần này — đừng bỏ lỡ",
+          "description": "Giảm 25% tuần này cho Cà phê Arabica Cầu Đất. Hương thơm đậm đà. Rang mới mỗi tuần.",
+          "cta": "Nhận ưu đãi",
+          "badge": "-25%",
+          "angle": "urgency"
+        },
+        {
+          "eyebrow": "Khách hàng yêu thích",
+          "headline": "Cà phê Arabica Cầu Đất ai cũng đang nhắc đến",
+          "description": "Dành cho dân văn phòng muốn nhiều hơn. Hương thơm đậm đà, rang mới mỗi tuần.",
+          "cta": "Xem ngay",
+          "badge": "",
+          "angle": "social_proof"
+        },
+        {
+          "eyebrow": "Giải pháp dễ dàng",
+          "headline": "Giải pháp dễ dàng cho cà phê đắng gắt",
+          "description": "Hương thơm đậm đà. Rang mới mỗi tuần. Không còn phải đánh đổi.",
+          "cta": "Tìm hiểu",
+          "badge": "",
+          "angle": "problem_solution"
+        },
+        {
+          "eyebrow": "Mới ra mắt",
+          "headline": "Điều gì khiến Cà phê Arabica Cầu Đất khác biệt?",
+          "description": "Hương thơm đậm đà. Rang mới mỗi tuần. Lướt để khám phá ngay.",
+          "cta": "Khám phá",
+          "badge": "",
+          "angle": "curiosity"
+        },
+        {
+          "eyebrow": "Ưu đãi có hạn",
+          "headline": "Cơ hội cuối cho Cà phê Arabica Cầu Đất",
+          "description": "Giảm 25% tuần này cho Cà phê Arabica Cầu Đất. Hương thơm đậm đà. Rang mới mỗi tuần.",
+          "cta": "Nhận ưu đãi",
+          "badge": "-25%",
+          "angle": "urgency"
+        }
+      ]
+    },
+    "05-one-copy-any-brand.jpg": {
+      "what": "Brand kit swap",
+      "kits": [
+        "aurora",
+        "sunset",
+        "verde",
+        "noir",
+        "blossom",
+        "/home/user/growth-creative-factory/examples/demo_brand/brand.yaml"
+      ]
+    },
+    "06-every-placement.jpg": {
+      "what": "One creative in every placement",
+      "command": "gcf render --input sheet.csv --formats all"
+    }
+  },
+  "totals": {
+    "demo_images_rendered": 98
+  }
+}

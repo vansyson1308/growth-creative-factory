@@ -42,7 +42,53 @@ Growth Creative Factory gói cả vòng lặp đó vào một lệnh:
 | 🧭 **An toàn chi phí** | Giới hạn số lần gọi API, retry có backoff, cache, xử lý refusal, kiểm tra cấu hình chặt chẽ. |
 | 🖥️ **3 cách dùng** | CLI, ứng dụng Streamlit (Creative Studio + Ads Wizard) và Python API. |
 
-<img src="docs/assets/vietnamese.jpg" alt="Ba mẫu story tiếng Việt" width="100%">
+## Bằng chứng, không chỉ lời hứa
+
+Mọi ảnh trong phần này đều do chính repo tạo ra, không phải ảnh dựng bằng công cụ thiết kế.
+Chú thích mỗi ảnh ghi lệnh đã tạo ra nó. Cả bộ ảnh được tạo lại bằng **`gcf demo`**
+(mã nguồn: [`gcf/demo.py`](gcf/demo.py), dữ liệu đầu vào trong [`examples/`](examples/)), mất
+khoảng 40 giây trên laptop, chạy offline, không cần API key. CI chạy lệnh này ở mỗi lần push và
+đính kèm kết quả vào bản build. Thời gian chạy, phiên bản và copy được sinh ra đều lưu trong
+[`docs/demo/demo.json`](docs/demo/demo.json).
+
+### 1 · Quảng cáo kém hiệu quả vào, chẩn đoán và creative mới ra
+
+`gcf run --input examples/demo_ads.csv --mode dry`: tool lọc các quảng cáo yếu theo CTR, CPA và
+ROAS, chẩn đoán nguyên nhân bằng chính số liệu của từng quảng cáo, viết copy mới rồi kiểm duyệt,
+và render mỗi biến thể thành ảnh theo brand kit của nhà quảng cáo đó.
+
+<img src="docs/demo/01-before-after.jpg" alt="Quảng cáo kém hiệu quả, chẩn đoán và creative mới" width="100%">
+
+### 2 · Một lần chạy, 75 ảnh khác nhau
+
+<img src="docs/demo/02-one-run-at-scale.jpg" alt="75 creative từ một lần chạy" width="100%">
+
+### 3 · App chạy thật, quay trực tiếp
+
+<img src="docs/demo/08-studio-app.gif" alt="Quay màn hình Creative Studio" width="100%">
+
+### 4 · Một brief thành cả tuần bài đăng
+
+<img src="docs/demo/04-brief-to-posts-vi.jpg" alt="Sáu bài đăng tiếng Việt từ một brief" width="100%">
+
+<img src="docs/demo/03-brief-to-posts-en.jpg" alt="Six English posts from one brief" width="100%">
+
+### 5 · Thương hiệu của bạn, logo của bạn
+
+<img src="docs/demo/05-one-copy-any-brand.jpg" alt="Cùng một copy trên sáu brand kit" width="100%">
+
+### 6 · Mọi vị trí hiển thị từ một dòng copy
+
+<img src="docs/demo/06-every-placement.jpg" alt="Một creative trên mọi kích thước" width="100%">
+
+### 7 · Trang duyệt ảnh cho cả team
+
+<img src="docs/demo/07-review-gallery.jpg" alt="Trang gallery HTML để duyệt ảnh" width="100%">
+
+> **Về chế độ dry.** Các ảnh trên dùng copywriter offline để ai cũng tái tạo được miễn phí.
+> Copy của nó dựa trên mẫu câu và cố ý không bịa thông tin (không có số lượt đánh giá, điểm sao
+> hay cam kết giao hàng giả). Chế độ live đưa cùng pipeline này qua Claude để có copy sắc nét
+> và cụ thể hơn.
 
 ## Bắt đầu nhanh (2 phút, không cần API key)
 
